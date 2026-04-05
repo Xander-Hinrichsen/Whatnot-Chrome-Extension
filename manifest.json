@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Whatnot Video Receipt Skip",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "description": "Automatically fast-forwards dynamically loaded video receipts on Whatnot by a configurable number of seconds.",
   "permissions": ["storage"],
   "host_permissions": [

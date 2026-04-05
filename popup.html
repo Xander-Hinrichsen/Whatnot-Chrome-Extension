@@ -44,6 +44,14 @@
         color: var(--muted);
       }
 
+      p.hint {
+        margin: -4px 0 10px;
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--muted);
+        opacity: 0.92;
+      }
+
       label {
         display: block;
         margin-bottom: 8px;
@@ -56,6 +64,40 @@
         display: flex;
         gap: 10px;
         align-items: stretch;
+      }
+
+      .row-toggle {
+        margin-bottom: 14px;
+      }
+
+      .toggle-btn {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: var(--radius);
+        background: var(--surface);
+        color: var(--muted);
+        font-weight: 600;
+        transition:
+          background 0.15s ease,
+          color 0.15s ease,
+          border-color 0.15s ease;
+      }
+
+      .toggle-btn:hover {
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .toggle-btn.active {
+        background: rgba(91, 156, 245, 0.22);
+        border-color: rgba(91, 156, 245, 0.45);
+        color: var(--text);
+      }
+
+      .toggle-btn.active#disable.active {
+        background: rgba(240, 128, 128, 0.18);
+        border-color: rgba(240, 128, 128, 0.4);
       }
 
       input[type="number"] {
@@ -116,6 +158,11 @@
   <body>
     <h1>Video receipt skip</h1>
     <p class="sub">Adds this many seconds after the time Whatnot opens the receipt (not from 0:00 of the file).</p>
+    <label id="toggleLabel">Extension</label>
+    <div class="row row-toggle" role="group" aria-labelledby="toggleLabel">
+      <button type="button" id="enable" class="toggle-btn">Enable</button>
+      <button type="button" class="toggle-btn" id="disable">Disable</button>
+    </div>
     <label for="skipSeconds">Seconds after receipt start</label>
     <div class="row">
       <input
@@ -128,6 +175,23 @@
         inputmode="numeric"
       />
       <button type="button" id="save">Save</button>
+    </div>
+    <label for="seekStepSeconds">Skip forward / back (seconds)</label>
+    <p class="hint">
+      Used for ← → keyboard seeks. Whatnot’s player often jumps by a fraction of total
+      duration; this replaces that with a fixed step.
+    </p>
+    <div class="row">
+      <input
+        id="seekStepSeconds"
+        type="number"
+        min="1"
+        max="600"
+        step="1"
+        value="10"
+        inputmode="numeric"
+      />
+      <button type="button" id="saveSeekStep">Save</button>
     </div>
     <div id="status" class="status" role="status" aria-live="polite"></div>
     <script src="popup.js"></script>
