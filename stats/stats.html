@@ -137,6 +137,9 @@
           <label>Grid rows <input type="number" id="sortRows" value="5" min="1" max="26"></label>
           <label>Grid cols <input type="number" id="sortCols" value="5" min="1" max="99"></label>
         </div>
+        <div class="sort-fields">
+          <label>Relay URL <input type="text" id="relayUrl" value="" placeholder="https://your-relay.deno.dev" class="relay-url-input"></label>
+        </div>
         <button type="button" id="sortStart">Start sorting</button>
         <p class="sort-note" id="sortNote"></p>
       </section>
@@ -146,6 +149,12 @@
           <span id="sortBatchLabel"></span>
           <span id="sortCardLabel"></span>
           <button type="button" id="sortBack" class="sort-btn-small">← Back to setup</button>
+          <button type="button" id="sessionToggle" class="sort-btn-small">Start session</button>
+        </div>
+        <div class="session-panel" id="sessionPanel" hidden>
+          <div id="qrCode"></div>
+          <p class="session-url" id="sessionUrl"></p>
+          <p class="session-status" id="sessionStatus"></p>
         </div>
         <div class="sort-display" id="sortDisplay"></div>
         <div class="sort-sub" id="sortSub"></div>
@@ -157,6 +166,7 @@
     </div>
 
     <script src="../vendor/chart.umd.min.js"></script>
+    <script src="../vendor/qrcode.min.js"></script>
     <script src="stats.js"></script>
   </body>
 </html>

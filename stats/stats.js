@@ -787,11 +787,13 @@
       sortNextBtn.textContent = "Next →";
     }
     sortNextBtn.disabled = isLast && isLastBatch;
+    syncState();
   }
 
   sortStartBtn.addEventListener("click", initSort);
 
   sortBackBtn.addEventListener("click", () => {
+    stopSession();
     sortSetup.hidden = false;
     sortStepper.hidden = true;
   });
@@ -827,6 +829,151 @@
       e.preventDefault();
       sortPrevBtn.click();
     }
+  });
+
+  // ---------- Remote Session ----------
+
+  const sessionToggleBtn = document.getElementById("sessionToggle");
+  const sessionPanel = document.getElementById("sessionPanel");
+  const qrCodeEl = document.getElementById("qrCode");
+  const sessionUrlEl = document.getElementById("sessionUrl");
+  const sessionStatusEl = document.getElementById("sessionStatus");
+  const relayUrlInput = document.getElementById("relayUrl");
+
+  const savedRelay = localStorage.getItem("sortRelayUrl");
+  if (savedRelay) relayUrlInput.value = savedRelay;
+  relayUrlInput.addEventListener("change", () => {
+    localStorage.setItem("sortRelayUrl", relayUrlInput.value.trim());
+  });
+
+  /** @type {WebSocket | null} */
+  let sessionWs = null;
+  let sessionRoomId = "";
+  let sessionActive = false;
+
+  function randomRoomId() {
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    let id = "";
+    for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+    return id;
+  }
+
+  function buildSortState() {
+    if (!sortCards.length) return null;
+    const card = sortCards[sortCardIdx];
+    const owner = card.owner;
+    const cellMap = batchCellMap(sortBatch);
+    const nBatches = totalBatches();
+
+    let cell = "—", cellClass = "skip", sub = "Not in this batch";
+    if (sortExcluded.has(owner)) {
+      cell = "✕";
+      cellClass = "excluded";
+      sub = sortExcludeReason.get(owner) || "Excluded";
+    } else if (cellMap.has(owner)) {
+      cell = cellMap.get(owner);
+      cellClass = "hit";
+      sub = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards`;
+    }
+
+    const isLast = sortCardIdx >= sortCards.length - 1;
+    const isLastBatch = sortBatch >= nBatches - 1;
+    let nextLabel = "Next";
+    if (isLast && !isLastBatch) nextLabel = `Batch ${sortBatch + 2}`;
+    else if (isLast && isLastBatch) nextLabel = "Done";
+
+    return {
+      cell,
+      cellClass,
+      sub,
+      batch: `${sortBatch + 1}/${nBatches}`,
+      cardNum: card.cardNum,
+      cardIdx: `${sortCardIdx + 1}`,
+      totalCards: `${sortCards.length}`,
+      totalBatches: `${nBatches}`,
+      prevDisabled: sortCardIdx === 0 && sortBatch === 0,
+      nextDisabled: isLast && isLastBatch,
+      nextLabel,
+    };
+  }
+
+  function syncState() {
+    if (!sessionWs || sessionWs.readyState !== WebSocket.OPEN) return;
+    const state = buildSortState();
+    if (state) sessionWs.send(JSON.stringify({ type: "state", data: state }));
+  }
+
+  function startSession() {
+    const relay = (relayUrlInput.value || "").trim().replace(/\/+$/, "");
+    if (!relay) {
+      sessionStatusEl.textContent = "Enter a relay URL first.";
+      return;
+    }
+    if (!sessionRoomId) sessionRoomId = randomRoomId();
+    const wsProto = relay.startsWith("https") ? "wss" : "ws";
+    const relayHost = relay.replace(/^https?:\/\//, "");
+    const wsUrl = `${wsProto}://${relayHost}/ws/${sessionRoomId}?role=host`;
+    const phoneUrl = `${relay}/room/${sessionRoomId}`;
+
+    sessionStatusEl.textContent = "Connecting…";
+    sessionWs = new WebSocket(wsUrl);
+
+    sessionWs.onopen = () => {
+      sessionActive = true;
+      sessionToggleBtn.textContent = "Stop session";
+      sessionPanel.hidden = false;
+      sessionStatusEl.textContent = "Connected — phones can join";
+
+      qrCodeEl.textContent = "";
+      if (typeof qrcode !== "undefined") {
+        const qr = qrcode(0, "M");
+        qr.addData(phoneUrl);
+        qr.make();
+        qrCodeEl.innerHTML = qr.createImgTag(4, 8);
+      }
+      sessionUrlEl.textContent = phoneUrl;
+      syncState();
+    };
+
+    sessionWs.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === "command") {
+          if (msg.action === "next") sortNextBtn.click();
+          else if (msg.action === "prev") sortPrevBtn.click();
+        }
+      } catch (_) {}
+    };
+
+    sessionWs.onclose = () => {
+      if (sessionActive) {
+        sessionStatusEl.textContent = "Disconnected — reconnecting…";
+        setTimeout(startSession, 1500);
+      }
+    };
+
+    sessionWs.onerror = () => {
+      sessionStatusEl.textContent = "Connection error";
+    };
+  }
+
+  function stopSession() {
+    sessionActive = false;
+    sessionRoomId = "";
+    if (sessionWs) {
+      sessionWs.close();
+      sessionWs = null;
+    }
+    sessionToggleBtn.textContent = "Start session";
+    sessionPanel.hidden = true;
+    qrCodeEl.textContent = "";
+    sessionUrlEl.textContent = "";
+    sessionStatusEl.textContent = "";
+  }
+
+  sessionToggleBtn.addEventListener("click", () => {
+    if (sessionActive) stopSession();
+    else startSession();
   });
 
   mplTheme();
