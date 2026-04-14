@@ -73,6 +73,10 @@
   }
 
   /** @param {string} t */
+  function cleanOwnerName(raw) {
+    return ((raw || "").trim().split(/\s+/)[0]) || "";
+  }
+
   function looksLikeAccountName(t) {
     const s = (t || "").replace(/\s+/g, " ").trim();
     if (s.length < 2) return false;
@@ -293,14 +297,14 @@
             uniqueId: `${gid}-${row.recipient}-${seq}`,
             cardNum,
             showName,
-            owner: row.recipient,
+            owner: cleanOwnerName(row.recipient),
             listingRaw: listLine,
           });
         } else {
           soldCards.push({
             cardNum,
             showName,
-            owner: row.recipient,
+            owner: cleanOwnerName(row.recipient),
             value: row.unitPrice,
             saleType: saleNorm,
             listingRaw: listLine,

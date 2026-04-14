@@ -15,30 +15,44 @@ function phoneHtml(roomId: string): string {
 <title>Sort Remote</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden;font-family:-apple-system,system-ui,sans-serif;background:#fafafa;color:#333}
+html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:#fafafa;color:#333}
 .wrap{display:flex;flex-direction:column;height:100%;padding:10px}
-.info{text-align:center;font-size:14px;color:#666;padding:6px 0;flex-shrink:0}
-.display-area{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+.info{text-align:center;font-size:14px;color:#666;padding:4px 0;flex-shrink:0}
+.display-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
 .cell{font-size:min(28vw,140px);font-weight:800;line-height:1;padding:20px 32px;border-radius:16px;text-align:center;min-width:50%;transition:all .12s ease}
 .cell.hit{background:#e8f5e9;color:#1b5e20;border:4px solid #66bb6a}
 .cell.skip{background:#fff3e0;color:#e65100;border:4px solid #ffb74d;font-size:min(8vw,36px);font-weight:600}
-.cell.excluded{background:#fce4ec;color:#b71c1c;border:4px solid #ef9a9a;font-size:min(7vw,30px);font-weight:600}
+.cell.giveaway{background:#ede7f6;color:#4a148c;border:4px solid #b39ddb}
+.cardnum{font-size:min(14vw,64px);font-weight:700;text-align:center;margin-top:6px;min-height:1.2em;line-height:1.1}
 .sub{text-align:center;font-size:13px;color:#888;min-height:1.4em;padding:4px 0;flex-shrink:0}
 .nav{display:flex;gap:12px;padding:8px 0;flex-shrink:0}
 .nav button{flex:1;padding:20px 10px;font-size:22px;font-weight:700;border:2px solid #bbb;border-radius:12px;background:#f0f0f0;color:#333;cursor:pointer;touch-action:manipulation}
 .nav button:active{background:#ddd;transform:scale(.97)}
 .nav button:disabled{opacity:.35;pointer-events:none}
+.lookup{display:flex;align-items:center;gap:6px;font-size:12px;color:#888;padding:6px 0;flex-shrink:0;flex-wrap:wrap;justify-content:center}
+.lookup select,.lookup input{padding:4px 6px;border:1px solid #bbb;border-radius:6px;font-size:12px}
+.lookup input{width:48px;text-align:center;text-transform:uppercase}
+.lookup-result{font-weight:500;color:#333}
 .status{text-align:center;font-size:11px;color:#aaa;padding:4px 0;flex-shrink:0}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="info" id="info">Loading data...</div>
-  <div class="display-area"><div class="cell" id="cell">...</div></div>
+  <div class="display-area">
+    <div class="cell" id="cell">...</div>
+    <div class="cardnum" id="cardnum"></div>
+  </div>
   <div class="sub" id="sub"></div>
   <div class="nav">
     <button id="prev" disabled>Prev</button>
     <button id="next" disabled>Next</button>
+  </div>
+  <div class="lookup" id="lookupWrap" style="display:none">
+    <span>Lookup:</span>
+    <select id="lkBatch"></select>
+    <input id="lkCell" placeholder="A1">
+    <span class="lookup-result" id="lkResult"></span>
   </div>
   <div class="status" id="status"></div>
 </div>
@@ -46,62 +60,88 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,system-ui,sans-s
 (function(){
   var roomId="${roomId}";
   var cellEl=document.getElementById("cell");
+  var cardnumEl=document.getElementById("cardnum");
   var infoEl=document.getElementById("info");
   var subEl=document.getElementById("sub");
   var statusEl=document.getElementById("status");
   var prevBtn=document.getElementById("prev");
   var nextBtn=document.getElementById("next");
+  var lookupWrap=document.getElementById("lookupWrap");
+  var lkBatch=document.getElementById("lkBatch");
+  var lkCell=document.getElementById("lkCell");
+  var lkResult=document.getElementById("lkResult");
 
-  var cards=[];
-  var totalBatches=1;
+  var batches=[];
+  var nBatches=1;
   var batch=0;
   var idx=0;
 
-  function render(){
-    if(!cards.length)return;
-    var c=cards[idx];
-    var nb=totalBatches;
+  function cards(){return batches[batch]?batches[batch].cards:[];}
 
-    var cell,cls,sub;
-    if(c.status==="excluded"){
-      cell="\\u2715";cls="excluded";sub=c.reason||"Excluded";
-    }else if(c.batchIdx===batch){
-      cell=c.cell;cls="hit";sub=c.ownerInfo;
+  function render(){
+    var cc=cards();
+    if(!cc.length)return;
+    var c=cc[idx];
+
+    var label,cls,sub;
+    if(c.status==="giveaway"){
+      label="Giveaway";cls="giveaway";sub=c.owner;
+    }else if(c.status==="hit"){
+      label=c.cell;cls="hit";sub=c.ownerInfo;
     }else{
-      cell="\\u2014";cls="skip";sub="Not in this batch";
+      label="\\u2014";cls="skip";sub="Not in this batch";
     }
 
-    cellEl.textContent=cell;
+    cellEl.textContent=label;
     cellEl.className="cell "+cls;
-    infoEl.textContent="Batch "+(batch+1)+"/"+nb+" \\u00b7 Card #"+c.cardNum+" ("+(idx+1)+"/"+cards.length+")";
+    infoEl.textContent="Batch "+(batch+1)+"/"+nBatches;
+    var cn=c.status==="giveaway"?c.cardNum:"Card #"+c.cardNum;
+    cardnumEl.textContent=cn+" ("+(idx+1)+"/"+cc.length+")";
     subEl.textContent=sub;
 
     prevBtn.disabled=(idx===0&&batch===0);
-    var isLast=idx>=cards.length-1;
-    var isLastBatch=batch>=nb-1;
+    var isLast=idx>=cc.length-1;
+    var isLastBatch=batch>=nBatches-1;
     if(isLast&&!isLastBatch){nextBtn.textContent="Batch "+(batch+2);nextBtn.disabled=false;}
     else if(isLast&&isLastBatch){nextBtn.textContent="Done";nextBtn.disabled=true;}
     else{nextBtn.textContent="Next";nextBtn.disabled=false;}
   }
 
   function goNext(){
-    if(idx<cards.length-1){idx++;render();}
-    else if(batch<totalBatches-1){batch++;idx=0;render();}
+    var cc=cards();
+    if(idx<cc.length-1){idx++;render();}
+    else if(batch<nBatches-1){batch++;idx=0;render();}
   }
   function goPrev(){
     if(idx>0){idx--;render();}
-    else if(batch>0){batch--;idx=cards.length-1;render();}
+    else if(batch>0){batch--;idx=cards().length-1;render();}
+  }
+
+  function doLookup(){
+    var b=parseInt(lkBatch.value,10);
+    var code=(lkCell.value||"").trim().toUpperCase();
+    if(isNaN(b)||!code||!batches[b]){lkResult.textContent="";return;}
+    var map=batches[b].cellToAccount||{};
+    var entry=map[code];
+    if(entry){
+      var nums=(entry.cards||[]).map(function(n){return"#"+n;}).join(", ");
+      lkResult.textContent=entry.owner+" \\u2014 "+(nums||"no cards");
+    }else{lkResult.textContent="Empty cell";}
   }
 
   nextBtn.onclick=goNext;
   prevBtn.onclick=goPrev;
+  lkBatch.onchange=doLookup;
+  lkCell.oninput=doLookup;
 
   fetch(location.origin+"/api/"+roomId+"/data").then(function(r){return r.json();}).then(function(d){
-    cards=d.cards||[];
-    totalBatches=d.totalBatches||1;
+    batches=d.batches||[];
+    nBatches=d.totalBatches||1;
     batch=0;idx=0;
-    if(cards.length){
-      statusEl.textContent=cards.length+" cards loaded";
+    if(batches.length&&cards().length){
+      statusEl.textContent="Data loaded";
+      lookupWrap.style.display="flex";
+      for(var i=0;i<nBatches;i++){var o=document.createElement("option");o.value=String(i);o.textContent="Batch "+(i+1);lkBatch.appendChild(o);}
       render();
     }else{
       infoEl.textContent="No data yet. Start sorting on the PC first.";

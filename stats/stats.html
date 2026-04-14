@@ -147,7 +147,6 @@
       <section class="sort-stepper" id="sortStepper" hidden>
         <div class="sort-info">
           <span id="sortBatchLabel"></span>
-          <span id="sortCardLabel"></span>
           <button type="button" id="sortBack" class="sort-btn-small">← Back to setup</button>
           <button type="button" id="sessionToggle" class="sort-btn-small">Start session</button>
         </div>
@@ -157,10 +156,17 @@
           <p class="session-status" id="sessionStatus"></p>
         </div>
         <div class="sort-display" id="sortDisplay"></div>
+        <div class="sort-card-num" id="sortCardNum"></div>
         <div class="sort-sub" id="sortSub"></div>
         <div class="sort-nav">
           <button type="button" id="sortPrev" class="sort-nav-btn">← Prev</button>
           <button type="button" id="sortNext" class="sort-nav-btn">Next →</button>
+        </div>
+        <div class="sort-lookup">
+          <span class="sort-lookup-label">Lookup:</span>
+          <select id="lookupBatch" class="sort-lookup-input"></select>
+          <input type="text" id="lookupCell" placeholder="A1" class="sort-lookup-input sort-lookup-cell">
+          <span id="lookupResult" class="sort-lookup-result"></span>
         </div>
       </section>
     </div>
