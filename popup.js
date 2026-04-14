@@ -70,12 +70,13 @@ disableBtn.addEventListener("click", () => {
 });
 
 openStatsBtn.addEventListener("click", () => {
-  chrome.windows.create({
-    url: chrome.runtime.getURL("stats/stats.html"),
-    type: "popup",
-    width: 960,
-    height: 780,
-    focused: true,
+  chrome.runtime.sendMessage({ type: "OPEN_OR_FOCUS_STATS" }, (res) => {
+    if (chrome.runtime.lastError || res?.ok === false) {
+      statusEl.textContent = "Could not open stats window.";
+      statusEl.style.color = "#f08080";
+      statusEl.classList.add("visible");
+      window.setTimeout(() => statusEl.classList.remove("visible"), 2500);
+    }
   });
 });
 

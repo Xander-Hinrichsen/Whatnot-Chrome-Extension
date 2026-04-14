@@ -10,6 +10,21 @@
   const elCharts = document.getElementById("charts");
   const elFilterStatus = document.getElementById("filterStatus");
   const btnRefresh = document.getElementById("refresh");
+  const elStatAccounts = document.getElementById("statAccounts");
+  const elStatCards = document.getElementById("statCards");
+  const elStatGross = document.getElementById("statGross");
+  const elStatAvgAccount = document.getElementById("statAvgAccount");
+  const elStatAvgCard = document.getElementById("statAvgCard");
+  const elStatGiveaways = document.getElementById("statGiveaways");
+  const elPanelOverview = document.getElementById("panelOverview");
+  const elPanelData = document.getElementById("panelData");
+  const tbodySold = document.getElementById("tbodySold");
+  const tbodyGiveaway = document.getElementById("tbodyGiveaway");
+
+  /** @type {any[]} */
+  let lastFilteredSold = [];
+  /** @type {any[]} */
+  let lastFilteredGw = [];
 
   /** @type {any} */
   let chartItems = null;
@@ -18,7 +33,7 @@
   /** @type {any} */
   let chartCardPrice = null;
 
-  /** @type {{ rows: any[]; cardLines?: any[] } | null} */
+  /** @type {{ rows: any[]; cardLines?: any[]; soldCards?: any[]; giveawayCards?: any[] } | null} */
   let lastPayload = null;
 
   /** Dense bins for typical account totals (most mass below ~$30). */
@@ -137,39 +152,143 @@
   }
 
   /**
-   * @param {any[]} cardLines
+   * @param {any[]} soldCards
+   * @param {any[]} giveawayCards
    * @param {any[]} filteredAccountRows
    * @param {boolean} statusFilterOn
+   * @returns {[any[], any[]]}
    */
-  function filterCardLines(cardLines, filteredAccountRows, statusFilterOn) {
-    if (!statusFilterOn) return cardLines;
+  function filterCatalogByStatus(
+    soldCards,
+    giveawayCards,
+    filteredAccountRows,
+    statusFilterOn
+  ) {
+    if (!statusFilterOn) {
+      return [soldCards || [], giveawayCards || []];
+    }
     const allowed = new Set(
       filteredAccountRows.map((r) => (r.recipient || "").trim()).filter(Boolean)
     );
-    return cardLines.filter((line) => {
-      const r = (line.recipient || "").trim();
-      if (!r) return false;
-      return allowed.has(r);
-    });
+    const fs = (soldCards || []).filter((c) => allowed.has((c.owner || "").trim()));
+    const fg = (giveawayCards || []).filter((c) =>
+      allowed.has((c.owner || "").trim())
+    );
+    return [fs, fg];
   }
 
   /**
-   * @param {any[]} cardLines
-   * @returns {number[]}
+   * @param {any[]} filteredSold
+   * @param {any[]} filteredGiveaway
    */
-  function cardLinesToUnitSamples(cardLines) {
-    /** @type {number[]} */
-    const out = [];
-    for (let i = 0; i < cardLines.length; i++) {
-      const line = cardLines[i];
-      const price = line.unitPrice;
-      if (!Number.isFinite(price)) continue;
-      let q = line.qty;
-      if (!Number.isFinite(q) || q < 1) q = 1;
-      q = Math.min(q, 500);
-      for (let j = 0; j < q; j++) out.push(price);
+  function updateSummaryPanel(filteredSold, filteredGiveaway) {
+    const owners = new Set();
+    for (let i = 0; i < filteredSold.length; i++) {
+      const o = (filteredSold[i].owner || "").trim();
+      if (o) owners.add(o);
     }
-    return out;
+    for (let i = 0; i < filteredGiveaway.length; i++) {
+      const o = (filteredGiveaway[i].owner || "").trim();
+      if (o) owners.add(o);
+    }
+    const nAccounts = owners.size;
+    const nSold = filteredSold.length;
+    const nGw = filteredGiveaway.length;
+
+    const gross = filteredSold.reduce((a, c) => a + (Number(c.value) || 0), 0);
+    const grossLabel = nSold > 0 ? formatMoney(gross) : nAccounts > 0 ? formatMoney(0) : "—";
+
+    /** @type {Map<string, number>} */
+    const ownerTotals = new Map();
+    for (let i = 0; i < filteredSold.length; i++) {
+      const c = filteredSold[i];
+      const o = (c.owner || "").trim();
+      if (!o) continue;
+      ownerTotals.set(o, (ownerTotals.get(o) || 0) + (Number(c.value) || 0));
+    }
+    const avgAccount =
+      ownerTotals.size > 0 ? formatMoney(gross / ownerTotals.size) : "—";
+    const avgCard = nSold > 0 ? formatMoney(gross / nSold) : "—";
+
+    elStatAccounts.textContent = String(nAccounts);
+    elStatCards.textContent = String(nSold);
+    elStatGiveaways.textContent = String(nGw);
+    elStatGross.textContent = grossLabel;
+    elStatAvgAccount.textContent = avgAccount;
+    elStatAvgCard.textContent = avgCard;
+  }
+
+  function clearSummaryPanel() {
+    elStatAccounts.textContent = "—";
+    elStatCards.textContent = "—";
+    elStatGiveaways.textContent = "—";
+    elStatGross.textContent = "—";
+    elStatAvgAccount.textContent = "—";
+    elStatAvgCard.textContent = "—";
+  }
+
+  /**
+   * @param {any[]} sold
+   * @param {any[]} gw
+   */
+  function renderDataTables(sold, gw) {
+    tbodySold.textContent = "";
+    for (let i = 0; i < sold.length; i++) {
+      const c = sold[i];
+      const tr = document.createElement("tr");
+      const cells = [
+        c.cardNum != null ? String(c.cardNum) : "—",
+        c.showName || "",
+        c.owner || "",
+        formatMoney(Number(c.value) || 0),
+        c.saleType || "",
+        c.listingRaw || "",
+      ];
+      for (let j = 0; j < cells.length; j++) {
+        const td = document.createElement("td");
+        td.textContent = cells[j];
+        tr.appendChild(td);
+      }
+      tbodySold.appendChild(tr);
+    }
+    tbodyGiveaway.textContent = "";
+    for (let i = 0; i < gw.length; i++) {
+      const c = gw[i];
+      const tr = document.createElement("tr");
+      const cells = [c.id || "", c.showName || "", c.owner || "", c.listingRaw || ""];
+      for (let j = 0; j < cells.length; j++) {
+        const td = document.createElement("td");
+        td.textContent = cells[j];
+        tr.appendChild(td);
+      }
+      tbodyGiveaway.appendChild(tr);
+    }
+  }
+
+  /** @param {string} s */
+  function csvEscape(s) {
+    const t = String(s ?? "");
+    if (/[",\n\r]/.test(t)) return `"${t.replace(/"/g, '""')}"`;
+    return t;
+  }
+
+  /**
+   * @param {string} filename
+   * @param {string[]} header
+   * @param {string[][]} rows
+   */
+  function downloadCsv(filename, header, rows) {
+    const lines = [header.map(csvEscape).join(",")];
+    for (let i = 0; i < rows.length; i++) {
+      lines.push(rows[i].map(csvEscape).join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function destroyCharts() {
@@ -188,10 +307,9 @@
   }
 
   /**
-   * @param {any[]} rows
-   * @param {any[]} allCardLines
+   * @param {any[]} filteredSold
    */
-  function renderCharts(rows, allCardLines) {
+  function renderCharts(filteredSold) {
     destroyCharts();
     if (typeof Chart === "undefined") {
       setMessage("Chart library failed to load.", "err");
@@ -199,16 +317,25 @@
     }
     mplTheme();
 
-    const statusFilterOn = elFilterStatus.value.trim() !== "";
-    const cardLines = filterCardLines(allCardLines || [], rows, statusFilterOn);
-    const cardSamples = cardLinesToUnitSamples(cardLines);
+    /** @type {Map<string, number>} */
+    const soldCountByOwner = new Map();
+    /** @type {Map<string, number>} */
+    const soldValueByOwner = new Map();
+    for (let i = 0; i < filteredSold.length; i++) {
+      const c = filteredSold[i];
+      const o = (c.owner || "").trim();
+      if (!o) continue;
+      soldCountByOwner.set(o, (soldCountByOwner.get(o) || 0) + 1);
+      soldValueByOwner.set(o, (soldValueByOwner.get(o) || 0) + (Number(c.value) || 0));
+    }
 
-    const itemNums = rows.map((r) => r.items).filter((x) => Number.isFinite(x));
-    const valueNums = rows.map((r) => r.value).filter((x) => Number.isFinite(x));
+    const itemNums = Array.from(soldCountByOwner.values());
+    const valueNums = Array.from(soldValueByOwner.values());
+    const cardPrices = filteredSold.map((c) => Number(c.value)).filter((x) => Number.isFinite(x));
 
     const itemsSpec = countItemsBars(itemNums);
     const valueSpec = histogramFixedEdges(valueNums, ACCOUNT_VALUE_EDGES);
-    const cardSpec = histogramFixedEdges(cardSamples, CARD_PRICE_EDGES);
+    const cardSpec = histogramFixedEdges(cardPrices, CARD_PRICE_EDGES);
 
     const tabBlue = "#1f77b4";
     const tabOrange = "#ff7f0e";
@@ -240,7 +367,7 @@
         },
         scales: {
           x: {
-            title: { display: true, text: "Items (main table)" },
+            title: { display: true, text: "Sold cards per account" },
             grid: { color: "#e0e0e0" },
           },
           y: {
@@ -318,7 +445,7 @@
           y: {
             beginAtZero: true,
             ticks: { precision: 0 },
-            title: { display: true, text: "Cards (qty-weighted)" },
+            title: { display: true, text: "Sold cards" },
             grid: { color: "#e0e0e0" },
           },
         },
@@ -327,13 +454,14 @@
   }
 
   /**
-   * @param {{ rows: any[]; cardLines?: any[]; expandClickCount?: number }} payload
+   * @param {{ rows: any[]; cardLines?: any[]; soldCards?: any[]; giveawayCards?: any[]; expandClickCount?: number }} payload
    * @param {number | null} scrapedAt
    */
   function render(payload, scrapedAt) {
     lastPayload = payload;
     const rows = payload.rows || [];
-    const cardLines = payload.cardLines || [];
+    const soldCards = payload.soldCards || [];
+    const giveawayCards = payload.giveawayCards || [];
     const expandClicks =
       typeof payload.expandClickCount === "number" ? payload.expandClickCount : null;
 
@@ -360,7 +488,12 @@
       elEmpty.hidden = false;
       elCharts.hidden = true;
       elMeta.textContent = "";
+      clearSummaryPanel();
       destroyCharts();
+      tbodySold.textContent = "";
+      tbodyGiveaway.textContent = "";
+      lastFilteredSold = [];
+      lastFilteredGw = [];
       return;
     }
 
@@ -372,28 +505,35 @@
         ? new Date(scrapedAt).toLocaleString()
         : "";
     const statusFilterOn = elFilterStatus.value.trim() !== "";
-    const cardLinesFiltered = filterCardLines(cardLines, filtered, statusFilterOn);
-    const nCardUnits = cardLinesToUnitSamples(cardLinesFiltered).length;
+    const [filteredSold, filteredGw] = filterCatalogByStatus(
+      soldCards,
+      giveawayCards,
+      filtered,
+      statusFilterOn
+    );
+    lastFilteredSold = filteredSold;
+    lastFilteredGw = filteredGw;
 
     const expandBit =
       expandClicks != null ? ` · ${expandClicks} “Expand” clicks (auto)` : "";
-    elMeta.textContent = `${filtered.length} of ${rows.length} accounts shown · ${nCardUnits} card line-items (qty-weighted)${expandBit}${t ? ` · scraped ${t}` : ""}`;
+    elMeta.textContent = `${filtered.length} of ${rows.length} accounts (main table) · ${filteredSold.length} sold cards · ${filteredGw.length} giveaways in catalog${expandBit}${t ? ` · scraped ${t}` : ""}`;
 
-    const hasNumeric =
-      filtered.some((r) => Number.isFinite(r.items)) ||
-      filtered.some((r) => Number.isFinite(r.value)) ||
-      nCardUnits > 0;
-    if (!hasNumeric) {
+    const hasCatalog = filteredSold.length > 0 || filteredGw.length > 0;
+    if (!hasCatalog) {
       destroyCharts();
+      clearSummaryPanel();
+      renderDataTables([], []);
       setMessage(
-        "Rows found but Items/Value could not be parsed, and no per-card prices were found. The extension auto-clicks “Expand” before scraping; if this stays empty, Whatnot may use a different control or load bundles in a way we can’t read yet.",
+        "Main table loaded, but no line items were found in the catalog. Refresh after bundles expand, or check Sale type / Listing columns.",
         "err"
       );
       return;
     }
 
     setMessage("", "clear");
-    renderCharts(filtered, cardLines);
+    updateSummaryPanel(filteredSold, filteredGw);
+    renderCharts(filteredSold);
+    renderDataTables(filteredSold, filteredGw);
   }
 
   function loadFromStorage() {
@@ -406,6 +546,11 @@
         elEmpty.hidden = false;
         elCharts.hidden = true;
         elMeta.textContent = "";
+        clearSummaryPanel();
+        tbodySold.textContent = "";
+        tbodyGiveaway.textContent = "";
+        lastFilteredSold = [];
+        lastFilteredGw = [];
       }
     });
   }
@@ -445,6 +590,41 @@
         render(nv, items[STORAGE_AT] ?? null);
       });
     }
+  });
+
+  document.querySelectorAll(".tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const panel = btn.getAttribute("data-panel");
+      document.querySelectorAll(".tab").forEach((b) => {
+        b.classList.toggle("tab-active", b === btn);
+      });
+      elPanelOverview.hidden = panel !== "overview";
+      elPanelData.hidden = panel !== "data";
+    });
+  });
+
+  document.getElementById("downloadSoldCsv").addEventListener("click", () => {
+    const header = ["card_num", "show", "account", "value", "sale_type", "listing"];
+    const rows = lastFilteredSold.map((c) => [
+      c.cardNum != null ? String(c.cardNum) : "",
+      c.showName || "",
+      c.owner || "",
+      String(c.value ?? ""),
+      c.saleType || "",
+      c.listingRaw || "",
+    ]);
+    downloadCsv("whatnot-sold-cards.csv", header, rows);
+  });
+
+  document.getElementById("downloadGiveawayCsv").addEventListener("click", () => {
+    const header = ["id", "show", "account", "listing"];
+    const rows = lastFilteredGw.map((c) => [
+      c.id || "",
+      c.showName || "",
+      c.owner || "",
+      c.listingRaw || "",
+    ]);
+    downloadCsv("whatnot-giveaways.csv", header, rows);
   });
 
   mplTheme();

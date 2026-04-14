@@ -13,42 +13,117 @@
       <span id="message" role="status" aria-live="polite"></span>
     </header>
 
-    <section class="filters">
-      <label>
-        Status
-        <select id="filterStatus" aria-label="Filter by status">
-          <option value="">All</option>
-        </select>
-      </label>
-    </section>
+    <nav class="tab-bar" aria-label="Views">
+      <button type="button" class="tab tab-active" data-panel="overview">Overview</button>
+      <button type="button" class="tab" data-panel="data">Data</button>
+    </nav>
 
-    <p id="meta" class="meta"></p>
+    <div id="panelOverview" class="tab-panel">
+      <section class="filters">
+        <label>
+          Status
+          <select id="filterStatus" aria-label="Filter by status">
+            <option value="">All</option>
+          </select>
+        </label>
+      </section>
 
-    <div id="emptyState" class="empty" hidden>
-      No data yet. Focus a Whatnot orders tab in this window, then click Refresh.
+      <p id="meta" class="meta"></p>
+
+      <div id="emptyState" class="empty" hidden>
+        No data yet. Focus a Whatnot orders tab in this window, then click Refresh.
+      </div>
+
+      <div class="charts" id="charts">
+        <div class="chart-wrap">
+          <h2>Sold cards per account</h2>
+          <p class="chart-note">From scraped line items (non-giveaway). How many accounts have each sold-card count.</p>
+          <canvas id="chartItems" aria-label="Bar chart of sold card counts per account"></canvas>
+        </div>
+        <div class="chart-wrap">
+          <h2>Total sold value per account</h2>
+          <p class="chart-note">Sum of line-item prices per owner (catalog), not the main grid “Value” column.</p>
+          <canvas id="chartValue" aria-label="Histogram of total sold value per account"></canvas>
+        </div>
+        <div class="chart-wrap">
+          <h2>Line-item price (sold)</h2>
+          <p class="chart-note">One bar per sold physical card from the catalog.</p>
+          <canvas id="chartCardPrice" aria-label="Histogram of per-card prices"></canvas>
+        </div>
+        <div class="chart-wrap summary-wrap">
+          <h2>Totals</h2>
+          <p class="chart-note">
+            From the scraped card catalog (expanded bundles). Gross = sum of sold line prices only.
+ </p>
+          <dl class="summary-stats">
+            <div class="summary-row">
+              <dt>Accounts (owners)</dt>
+              <dd id="statAccounts">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Cards (sold)</dt>
+              <dd id="statCards">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Giveaways</dt>
+              <dd id="statGiveaways">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Gross sales (sold)</dt>
+              <dd id="statGross">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Avg price / account</dt>
+              <dd id="statAvgAccount">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Avg price / card</dt>
+              <dd id="statAvgCard">—</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
     </div>
 
-    <div class="charts" id="charts">
-      <div class="chart-wrap">
-        <h2>Items per account</h2>
-        <p class="chart-note">Count of line items from the main “Items” column (per buyer row).</p>
-        <canvas id="chartItems" aria-label="Bar chart of item counts per account"></canvas>
+    <div id="panelData" class="tab-panel" hidden>
+      <p class="data-intro">
+        Matrices built from the same scrape as Overview. Sorted by card # ascending. Use CSV for a snapshot.
+      </p>
+      <div class="data-toolbar">
+        <button type="button" id="downloadSoldCsv">Download sold CSV</button>
+        <button type="button" id="downloadGiveawayCsv">Download giveaways CSV</button>
       </div>
-      <div class="chart-wrap">
-        <h2>Total value per account</h2>
-        <p class="chart-note">
-          Whatnot’s order “Value” column (sum for that buyer), not a single card.
-        </p>
-        <canvas id="chartValue" aria-label="Histogram of total value per account"></canvas>
+
+      <h3 class="data-heading">Sold cards</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="tableSold">
+          <thead>
+            <tr>
+              <th>Card #</th>
+              <th>Show</th>
+              <th>Account</th>
+              <th>Value</th>
+              <th>Sale type</th>
+              <th>Listing</th>
+            </tr>
+          </thead>
+          <tbody id="tbodySold"></tbody>
+        </table>
       </div>
-      <div class="chart-wrap">
-        <h2>Card / line-item price</h2>
-        <p class="chart-note">
-          From “Items (Bundled)” → Price × Qty. Refresh auto-clicks row “Expand” controls (may take ~10–30s
-          on long lists) so those tables mount. Status filter applies when the buyer name matches near the
-          table.
-        </p>
-        <canvas id="chartCardPrice" aria-label="Histogram of per-card prices"></canvas>
+
+      <h3 class="data-heading">Giveaways</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="tableGiveaway">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Show</th>
+              <th>Account</th>
+              <th>Listing</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyGiveaway"></tbody>
+        </table>
       </div>
     </div>
 

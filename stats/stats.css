@@ -144,6 +144,48 @@ select {
   max-height: 240px;
 }
 
+.summary-wrap {
+  height: auto;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-stats {
+  margin: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--grid);
+  border-radius: 4px;
+}
+
+.summary-row dt {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--axes);
+}
+
+.summary-row dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--axes);
+}
+
 .empty {
   padding: 24px;
   text-align: center;
@@ -151,4 +193,105 @@ select {
   font-size: 12px;
   border: 1px dashed var(--grid);
   border-radius: var(--radius);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--grid);
+  padding-bottom: 8px;
+}
+
+.tab {
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.tab:hover {
+  color: var(--axes);
+  background: #f3f3f3;
+}
+
+.tab.tab-active {
+  color: var(--axes);
+  background: #fafafa;
+  border-color: var(--grid);
+  border-bottom-color: #fafafa;
+  margin-bottom: -1px;
+}
+
+.tab-panel {
+  min-height: 200px;
+}
+
+.data-intro {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.data-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.data-toolbar button {
+  font-size: 11px;
+  padding: 6px 12px;
+}
+
+.data-heading {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.data-heading:first-of-type {
+  margin-top: 0;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--grid);
+  border-radius: var(--radius);
+  background: #fff;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid #e8e8e8;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  background: #f0f0f0;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.data-table tbody tr:hover {
+  background: #f9f9f9;
 }
