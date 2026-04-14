@@ -12,6 +12,7 @@ const saveSeekStepBtn = document.getElementById("saveSeekStep");
 const statusEl = document.getElementById("status");
 const enableBtn = document.getElementById("enable");
 const disableBtn = document.getElementById("disable");
+const openStatsBtn = document.getElementById("openStats");
 
 function setToggleUi(enabled) {
   enableBtn.classList.toggle("active", enabled);
@@ -66,6 +67,16 @@ enableBtn.addEventListener("click", () => {
 
 disableBtn.addEventListener("click", () => {
   persistEnabled(false);
+});
+
+openStatsBtn.addEventListener("click", () => {
+  chrome.windows.create({
+    url: chrome.runtime.getURL("stats/stats.html"),
+    type: "popup",
+    width: 960,
+    height: 780,
+    focused: true,
+  });
 });
 
 saveBtn.addEventListener("click", () => {

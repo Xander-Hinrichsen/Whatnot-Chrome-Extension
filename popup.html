@@ -70,6 +70,14 @@
         margin-bottom: 14px;
       }
 
+      .row-stats {
+        margin-bottom: 16px;
+      }
+
+      .row-stats button {
+        flex: 1;
+      }
+
       .toggle-btn {
         flex: 1;
         padding: 10px 12px;
@@ -162,6 +170,10 @@
     <div class="row row-toggle" role="group" aria-labelledby="toggleLabel">
       <button type="button" id="enable" class="toggle-btn">Enable</button>
       <button type="button" class="toggle-btn" id="disable">Disable</button>
+    </div>
+    <label id="statsLabel">Order stats</label>
+    <div class="row row-stats" role="group" aria-labelledby="statsLabel">
+      <button type="button" id="openStats">Open order stats window</button>
     </div>
     <label for="skipSeconds">Seconds after receipt start</label>
     <div class="row">

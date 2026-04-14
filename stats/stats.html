@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Whatnot order stats</title>
+    <link rel="stylesheet" href="stats.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Order stats</h1>
+      <button type="button" id="refresh">Refresh from Whatnot tab</button>
+      <span id="message" role="status" aria-live="polite"></span>
+    </header>
+
+    <section class="filters">
+      <label>
+        Status
+        <select id="filterStatus" aria-label="Filter by status">
+          <option value="">All</option>
+        </select>
+      </label>
+    </section>
+
+    <p id="meta" class="meta"></p>
+
+    <div id="emptyState" class="empty" hidden>
+      No data yet. Focus a Whatnot orders tab in this window, then click Refresh.
+    </div>
+
+    <div class="charts" id="charts">
+      <div class="chart-wrap">
+        <h2>Items per account</h2>
+        <p class="chart-note">Count of line items from the main “Items” column (per buyer row).</p>
+        <canvas id="chartItems" aria-label="Bar chart of item counts per account"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <h2>Total value per account</h2>
+        <p class="chart-note">
+          Whatnot’s order “Value” column (sum for that buyer), not a single card.
+        </p>
+        <canvas id="chartValue" aria-label="Histogram of total value per account"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <h2>Card / line-item price</h2>
+        <p class="chart-note">
+          From “Items (Bundled)” → Price × Qty. Refresh auto-clicks row “Expand” controls (may take ~10–30s
+          on long lists) so those tables mount. Status filter applies when the buyer name matches near the
+          table.
+        </p>
+        <canvas id="chartCardPrice" aria-label="Histogram of per-card prices"></canvas>
+      </div>
+    </div>
+
+    <script src="../vendor/chart.umd.min.js"></script>
+    <script src="stats.js"></script>
+  </body>
+</html>
