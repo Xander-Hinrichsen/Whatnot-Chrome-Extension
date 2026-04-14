@@ -309,22 +309,6 @@
       }
     }
 
-    function sortCatalog(/** @type {any[]} */ arr) {
-      arr.sort((a, b) => {
-        const na = a.cardNum;
-        const nb = b.cardNum;
-        if (na == null && nb == null)
-          return (a.listingRaw || "").localeCompare(b.listingRaw || "");
-        if (na == null) return 1;
-        if (nb == null) return -1;
-        if (na !== nb) return na - nb;
-        return (a.owner || "").localeCompare(b.owner || "");
-      });
-    }
-
-    sortCatalog(soldCards);
-    sortCatalog(giveawayCards);
-
     /** @type {CardLine[]} */
     const cardLines = soldCards.map((c) => ({
       unitPrice: c.value,
@@ -1006,7 +990,7 @@
 
   /**
    * @param {Element} root
-   * @returns {{ from: number; to: number; total: number; key: string; anchor: Element | null } | null}
+   * @returns {{ from: number; to: number; total: number; key: string } | null}
    */
   function getPaginationState(root) {
     const re = /\bshowing\s+(\d+)\s*(?:-|–|—|to)\s*(\d+)\s+of\s+(\d+)\b/i;
@@ -1021,7 +1005,7 @@
       const total = parseInt(m[3], 10);
       if (!Number.isFinite(from) || !Number.isFinite(to) || !Number.isFinite(total)) continue;
       if (from <= 0 || to <= 0 || total <= 0) continue;
-      return { from, to, total, key: `${from}-${to}-${total}`, anchor: el };
+      return { from, to, total, key: `${from}-${to}-${total}` };
     }
     const pageText = (root.textContent || "").replace(/\s+/g, " ").trim();
     const mm = pageText.match(re);
@@ -1031,7 +1015,7 @@
       const total = parseInt(mm[3], 10);
       if (Number.isFinite(from) && Number.isFinite(to) && Number.isFinite(total)) {
         if (from > 0 && to > 0 && total > 0) {
-          return { from, to, total, key: `${from}-${to}-${total}`, anchor: null };
+          return { from, to, total, key: `${from}-${to}-${total}` };
         }
       }
     }
@@ -1091,65 +1075,6 @@
       const label = controlLabel(el);
       if (isForbiddenActionLabel(label)) continue;
       return el;
-    }
-    return null;
-  }
-
-  /**
-   * @param {Element} root
-   * @param {Element | null} anchor
-   */
-  function findNextPageButton(root, anchor) {
-    /** @type {Element[]} */
-    const scopes = [];
-    let cur = anchor;
-    for (let d = 0; d < 6 && cur; d++) {
-      scopes.push(cur);
-      cur = cur.parentElement;
-    }
-    scopes.push(root);
-
-    const seen = new Set();
-    /** @type {HTMLElement[]} */
-    const labeledNext = [];
-    for (let s = 0; s < scopes.length; s++) {
-      const scope = scopes[s];
-      const buttons = scope.querySelectorAll(
-        'button, [role="button"], [aria-label*="next" i], [title*="next" i], [data-testid*="next" i]'
-      );
-      for (let i = 0; i < buttons.length; i++) {
-        const el = buttons[i];
-        if (seen.has(el)) continue;
-        seen.add(el);
-        if (!(el instanceof HTMLElement)) continue;
-        if (el.offsetParent === null) continue;
-        if (el.hasAttribute("disabled")) continue;
-        if ((el.getAttribute("aria-disabled") || "").toLowerCase() === "true") continue;
-        const label = controlLabel(el);
-        if (!label) continue;
-        if (isForbiddenActionLabel(label)) continue;
-        const looksNext =
-          label.includes("next") ||
-          label.includes("next page") ||
-          label.includes("page next") ||
-          label.includes("paginate next") ||
-          label === ">" ||
-          label === "›" ||
-          label === "→";
-        if (!looksNext) continue;
-        const looksPrev = label.includes("prev") || label.includes("previous") || label.includes("back");
-        if (looksPrev) continue;
-        labeledNext.push(el);
-      }
-    }
-    if (labeledNext.length > 0) {
-      labeledNext.sort((a, b) => {
-        const ra = a.getBoundingClientRect();
-        const rb = b.getBoundingClientRect();
-        if (ra.top !== rb.top) return rb.top - ra.top;
-        return rb.left - ra.left;
-      });
-      return labeledNext[0];
     }
     return null;
   }
@@ -1273,7 +1198,7 @@
 
   /**
    * @param {Element} root
-   * @param {{ from: number; to: number; total: number; key: string; anchor: Element | null } | null} before
+   * @param {{ from: number; to: number; total: number; key: string } | null} before
    * @param {string} beforeSig
    * @param {Element | null} tableLike
    */
@@ -1284,8 +1209,6 @@
     const toTry = [];
     const explicit = findExplicitNextPageButton(root);
     if (explicit) toTry.push(explicit);
-    const primary = findNextPageButton(root, before?.anchor || null);
-    if (primary && !toTry.includes(primary)) toTry.push(primary);
     const nearTable = findNextPageCandidatesNearTable(root, tableLike);
     for (let i = 0; i < nearTable.length; i++) {
       if (!toTry.includes(nearTable[i])) toTry.push(nearTable[i]);
@@ -1356,7 +1279,6 @@
     /** @type {any[]} */
     const allGw = [];
     let totalExpandClicks = 0;
-    const seenPageKeys = new Set();
     const seenRowSigs = new Set();
 
     for (let page = 0; page < 30; page++) {
@@ -1378,10 +1300,6 @@
       allGw.push(...(res.giveawayCards || []));
 
       const pg = getPaginationState(root);
-      const pageKey = pg?.key || `idx-${page}`;
-      if (seenPageKeys.has(pageKey)) break;
-      seenPageKeys.add(pageKey);
-
       const moved = await goToNextPage(
         root,
         pg,
