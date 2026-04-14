@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Whatnot order stats</title>
+    <link rel="stylesheet" href="stats.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Order stats</h1>
+      <button type="button" id="refresh">Refresh from Whatnot tab</button>
+      <span id="message" role="status" aria-live="polite"></span>
+    </header>
+
+    <nav class="tab-bar" aria-label="Views">
+      <button type="button" class="tab tab-active" data-panel="overview">Overview</button>
+      <button type="button" class="tab" data-panel="data">Data</button>
+      <button type="button" class="tab" data-panel="sort">Sort Helper</button>
+    </nav>
+
+    <div id="panelOverview" class="tab-panel">
+      <section class="filters">
+        <label>
+          Status
+          <select id="filterStatus" aria-label="Filter by status">
+            <option value="">All</option>
+          </select>
+        </label>
+      </section>
+
+      <p id="meta" class="meta"></p>
+
+      <div id="emptyState" class="empty" hidden>
+        No data yet. Focus a Whatnot orders tab in this window, then click Refresh.
+      </div>
+
+      <div class="charts" id="charts">
+        <div class="chart-wrap">
+          <h2>Sold cards per account</h2>
+          <p class="chart-note">From scraped line items (non-giveaway). How many accounts have each sold-card count.</p>
+          <canvas id="chartItems" aria-label="Bar chart of sold card counts per account"></canvas>
+        </div>
+        <div class="chart-wrap">
+          <h2>Total sold value per account</h2>
+          <p class="chart-note">Sum of line-item prices per owner (catalog), not the main grid “Value” column.</p>
+          <canvas id="chartValue" aria-label="Histogram of total sold value per account"></canvas>
+        </div>
+        <div class="chart-wrap">
+          <h2>Line-item price (sold)</h2>
+          <p class="chart-note">One bar per sold physical card from the catalog.</p>
+          <canvas id="chartCardPrice" aria-label="Histogram of per-card prices"></canvas>
+        </div>
+        <div class="chart-wrap summary-wrap">
+          <h2>Totals</h2>
+          <p class="chart-note">
+            From the scraped card catalog (expanded bundles). Gross = sum of sold line prices only.
+ </p>
+          <dl class="summary-stats">
+            <div class="summary-row">
+              <dt>Accounts (owners)</dt>
+              <dd id="statAccounts">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Cards (sold)</dt>
+              <dd id="statCards">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Giveaways</dt>
+              <dd id="statGiveaways">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Gross sales (sold)</dt>
+              <dd id="statGross">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Avg price / account</dt>
+              <dd id="statAvgAccount">—</dd>
+            </div>
+            <div class="summary-row">
+              <dt>Avg price / card</dt>
+              <dd id="statAvgCard">—</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div id="panelData" class="tab-panel" hidden>
+      <p class="data-intro">
+        Matrices built from the same scrape as Overview. Sorted by card # ascending. Use CSV for a snapshot.
+      </p>
+      <div class="data-toolbar">
+        <button type="button" id="downloadSoldCsv">Download sold CSV</button>
+        <button type="button" id="downloadGiveawayCsv">Download giveaways CSV</button>
+      </div>
+
+      <h3 class="data-heading">Sold cards</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="tableSold">
+          <thead>
+            <tr>
+              <th>Card #</th>
+              <th>Show</th>
+              <th>Account</th>
+              <th>Value</th>
+              <th>Sale type</th>
+              <th>Listing</th>
+            </tr>
+          </thead>
+          <tbody id="tbodySold"></tbody>
+        </table>
+      </div>
+
+      <h3 class="data-heading">Giveaways</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="tableGiveaway">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Show</th>
+              <th>Account</th>
+              <th>Listing</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyGiveaway"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="panelSort" class="tab-panel" hidden>
+      <section class="sort-setup" id="sortSetup">
+        <h3 class="sort-heading">Sort parameters</h3>
+        <div class="sort-fields">
+          <label>Min cards / account <input type="number" id="sortMin" value="2" min="1" max="999"></label>
+          <label>Max cards / account <input type="number" id="sortMax" value="999" min="1" max="9999"></label>
+          <label>Grid rows <input type="number" id="sortRows" value="5" min="1" max="26"></label>
+          <label>Grid cols <input type="number" id="sortCols" value="5" min="1" max="99"></label>
+        </div>
+        <button type="button" id="sortStart">Start sorting</button>
+        <p class="sort-note" id="sortNote"></p>
+      </section>
+
+      <section class="sort-stepper" id="sortStepper" hidden>
+        <div class="sort-info">
+          <span id="sortBatchLabel"></span>
+          <span id="sortCardLabel"></span>
+          <button type="button" id="sortBack" class="sort-btn-small">← Back to setup</button>
+        </div>
+        <div class="sort-display" id="sortDisplay"></div>
+        <div class="sort-sub" id="sortSub"></div>
+        <div class="sort-nav">
+          <button type="button" id="sortPrev" class="sort-nav-btn">← Prev</button>
+          <button type="button" id="sortNext" class="sort-nav-btn">Next →</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="../vendor/chart.umd.min.js"></script>
+    <script src="stats.js"></script>
+  </body>
+</html>
