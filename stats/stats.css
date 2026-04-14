@@ -423,3 +423,43 @@ select {
   padding: 14px 36px;
   min-width: 140px;
 }
+
+/* ---------- Session / Remote ---------- */
+
+.relay-url-input {
+  width: 260px;
+  padding: 6px 8px;
+  border: 1px solid #b0b0b0;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.session-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.session-panel img {
+  border-radius: 6px;
+  border: 1px solid var(--grid);
+}
+
+.session-url {
+  font-size: 11px;
+  color: var(--accent);
+  word-break: break-all;
+  text-align: center;
+  margin: 0;
+  user-select: all;
+  cursor: text;
+}
+
+.session-status {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+}
