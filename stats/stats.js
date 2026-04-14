@@ -667,6 +667,8 @@
   let sortCardIdx = 0;
   /** @type {{ cardNum: number | string; owner: string; isGiveaway?: boolean }[]} */
   let sortBatchCards = [];
+  /** @type {Map<string, number>} owner → batch index */
+  let sortOwnerBatch = new Map();
 
   function cellName(flatIdx) {
     const row = Math.floor(flatIdx / sortGridCols);
@@ -813,6 +815,12 @@
 
     sortAccountOrder.sort((a, b) => b.count - a.count);
 
+    sortOwnerBatch = new Map();
+    const bs = batchSize();
+    for (let i = 0; i < sortAccountOrder.length; i++) {
+      sortOwnerBatch.set(sortAccountOrder[i].owner, Math.floor(i / bs));
+    }
+
     if (!sortAccountOrder.length) {
       sortNote.textContent = `All accounts excluded by filters (min: ${minCards}, max: ${maxCards}). Adjust and try again.`;
       return;
@@ -850,9 +858,10 @@
       sortDisplay.textContent = cellMap.get(owner);
       sortSub.textContent = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards${gwTag}`;
     } else {
+      const ob = sortOwnerBatch.get(owner);
       sortDisplay.classList.add("cell-skip");
       sortDisplay.textContent = "—";
-      sortSub.textContent = "Not in this batch" + gwTag;
+      sortSub.textContent = (ob != null ? `In batch ${ob + 1}` : "Not assigned") + gwTag;
     }
 
     sortCardNum.textContent = card.isGiveaway ? `${card.cardNum}` : `Card #${card.cardNum}`;
@@ -978,7 +987,8 @@
             ownerInfo: `${c.owner} — ${sortAccountCounts.get(c.owner) || "?"} cards${gwTag}`,
           };
         }
-        return { cardNum: c.cardNum, status: "skip", giveaway: gw };
+        const ob = sortOwnerBatch.get(c.owner);
+        return { cardNum: c.cardNum, status: "skip", giveaway: gw, inBatch: ob != null ? ob + 1 : null };
       });
       const cellToAccount = {};
       cellMap.forEach((cell, owner) => {

@@ -100,7 +100,7 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
     }else if(c.status==="hit"){
       label=c.cell;cls=c.giveaway?"giveaway":"hit";sub=c.ownerInfo;
     }else{
-      label="\\u2014";cls="skip";sub="Not in this batch"+(c.giveaway?" (Giveaway)":"");
+      label="\\u2014";cls="skip";sub=(c.inBatch?"In batch "+c.inBatch:"Not assigned")+(c.giveaway?" (Giveaway)":"");
     }
 
     cellEl.textContent=label;
