@@ -22,6 +22,7 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
 .cell{font-size:min(28vw,140px);font-weight:800;line-height:1;padding:20px 32px;border-radius:16px;text-align:center;min-width:50%;transition:all .12s ease}
 .cell.hit{background:#e8f5e9;color:#1b5e20;border:4px solid #66bb6a}
 .cell.skip{background:#fff3e0;color:#e65100;border:4px solid #ffb74d;font-size:min(8vw,36px);font-weight:600}
+.cell.excluded{background:#fce4ec;color:#b71c1c;border:4px solid #ef9a9a;font-size:min(7vw,30px);font-weight:600}
 .cell.giveaway{background:#ede7f6;color:#4a148c;border:4px solid #b39ddb}
 .cardnum{font-size:min(14vw,64px);font-weight:700;text-align:center;margin-top:6px;min-height:1.2em;line-height:1.1}
 .sub{text-align:center;font-size:13px;color:#888;min-height:1.4em;padding:4px 0;flex-shrink:0}
@@ -29,6 +30,9 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
 .nav button{flex:1;padding:20px 10px;font-size:22px;font-weight:700;border:2px solid #bbb;border-radius:12px;background:#f0f0f0;color:#333;cursor:pointer;touch-action:manipulation}
 .nav button:active{background:#ddd;transform:scale(.97)}
 .nav button:disabled{opacity:.35;pointer-events:none}
+.jump{display:flex;align-items:center;gap:8px;font-size:13px;color:#666;padding:6px 0;flex-shrink:0;justify-content:center}
+.jump select,.jump input,.jump button{padding:6px 8px;border:1px solid #bbb;border-radius:8px;font-size:13px}
+.jump button{font-weight:600;background:#f0f0f0;cursor:pointer}
 .lookup{display:flex;align-items:center;gap:6px;font-size:12px;color:#888;padding:6px 0;flex-shrink:0;flex-wrap:wrap;justify-content:center}
 .lookup select,.lookup input{padding:4px 6px;border:1px solid #bbb;border-radius:6px;font-size:12px}
 .lookup input{width:48px;text-align:center;text-transform:uppercase}
@@ -48,9 +52,13 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
     <button id="prev" disabled>Prev</button>
     <button id="next" disabled>Next</button>
   </div>
+  <div class="jump" id="jumpWrap" style="display:none">
+    <select id="batchSel"></select>
+    <input id="skipTo" type="number" min="1" placeholder="Card #" style="width:72px;text-align:center">
+    <button id="skipBtn">Go</button>
+  </div>
   <div class="lookup" id="lookupWrap" style="display:none">
     <span>Lookup:</span>
-    <select id="lkBatch"></select>
     <input id="lkCell" placeholder="A1">
     <span class="lookup-result" id="lkResult"></span>
   </div>
@@ -66,8 +74,11 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
   var statusEl=document.getElementById("status");
   var prevBtn=document.getElementById("prev");
   var nextBtn=document.getElementById("next");
+  var jumpWrap=document.getElementById("jumpWrap");
+  var batchSel=document.getElementById("batchSel");
+  var skipTo=document.getElementById("skipTo");
+  var skipBtn=document.getElementById("skipBtn");
   var lookupWrap=document.getElementById("lookupWrap");
-  var lkBatch=document.getElementById("lkBatch");
   var lkCell=document.getElementById("lkCell");
   var lkResult=document.getElementById("lkResult");
 
@@ -76,31 +87,32 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
   var batch=0;
   var idx=0;
 
-  function cards(){return batches[batch]?batches[batch].cards:[];}
+  function cc(){return batches[batch]?batches[batch].cards:[];}
 
   function render(){
-    var cc=cards();
-    if(!cc.length)return;
-    var c=cc[idx];
+    var cards=cc();
+    if(!cards.length)return;
+    var c=cards[idx];
 
     var label,cls,sub;
-    if(c.status==="giveaway"){
-      label="Giveaway";cls="giveaway";sub=c.owner;
+    if(c.status==="excluded"){
+      label="\\u2715";cls="excluded";sub=(c.reason||"Excluded");
     }else if(c.status==="hit"){
-      label=c.cell;cls="hit";sub=c.ownerInfo;
+      label=c.cell;cls=c.giveaway?"giveaway":"hit";sub=c.ownerInfo;
     }else{
-      label="\\u2014";cls="skip";sub="Not in this batch";
+      label="\\u2014";cls="skip";sub="Not in this batch"+(c.giveaway?" (Giveaway)":"");
     }
 
     cellEl.textContent=label;
     cellEl.className="cell "+cls;
-    infoEl.textContent="Batch "+(batch+1)+"/"+nBatches;
-    var cn=c.status==="giveaway"?c.cardNum:"Card #"+c.cardNum;
-    cardnumEl.textContent=cn+" ("+(idx+1)+"/"+cc.length+")";
+    batchSel.value=String(batch);
+    infoEl.textContent="";
+    var cn=c.giveaway?c.cardNum:"Card #"+c.cardNum;
+    cardnumEl.textContent=cn+" ("+(idx+1)+"/"+cards.length+")";
     subEl.textContent=sub;
 
     prevBtn.disabled=(idx===0&&batch===0);
-    var isLast=idx>=cc.length-1;
+    var isLast=idx>=cards.length-1;
     var isLastBatch=batch>=nBatches-1;
     if(isLast&&!isLastBatch){nextBtn.textContent="Batch "+(batch+2);nextBtn.disabled=false;}
     else if(isLast&&isLastBatch){nextBtn.textContent="Done";nextBtn.disabled=true;}
@@ -108,20 +120,28 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
   }
 
   function goNext(){
-    var cc=cards();
-    if(idx<cc.length-1){idx++;render();}
+    var cards=cc();
+    if(idx<cards.length-1){idx++;render();}
     else if(batch<nBatches-1){batch++;idx=0;render();}
   }
   function goPrev(){
     if(idx>0){idx--;render();}
-    else if(batch>0){batch--;idx=cards().length-1;render();}
+    else if(batch>0){batch--;idx=cc().length-1;render();}
+  }
+  function jumpBatch(b){
+    if(b===batch||b<0||b>=nBatches)return;
+    batch=b;idx=0;render();doLookup();
+  }
+  function jumpCard(num){
+    var n=parseInt(num,10);if(isNaN(n))return;
+    var cards=cc();
+    for(var i=0;i<cards.length;i++){if(cards[i].cardNum===n){idx=i;render();return;}}
   }
 
   function doLookup(){
-    var b=parseInt(lkBatch.value,10);
     var code=(lkCell.value||"").trim().toUpperCase();
-    if(isNaN(b)||!code||!batches[b]){lkResult.textContent="";return;}
-    var map=batches[b].cellToAccount||{};
+    if(!code||!batches[batch]){lkResult.textContent="";return;}
+    var map=batches[batch].cellToAccount||{};
     var entry=map[code];
     if(entry){
       var nums=(entry.cards||[]).map(function(n){return"#"+n;}).join(", ");
@@ -131,17 +151,20 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
 
   nextBtn.onclick=goNext;
   prevBtn.onclick=goPrev;
-  lkBatch.onchange=doLookup;
+  batchSel.onchange=function(){jumpBatch(parseInt(batchSel.value,10));};
+  skipBtn.onclick=function(){jumpCard(skipTo.value);};
+  skipTo.onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();jumpCard(skipTo.value);}};
   lkCell.oninput=doLookup;
 
   fetch(location.origin+"/api/"+roomId+"/data").then(function(r){return r.json();}).then(function(d){
     batches=d.batches||[];
     nBatches=d.totalBatches||1;
     batch=0;idx=0;
-    if(batches.length&&cards().length){
+    if(batches.length&&cc().length){
       statusEl.textContent="Data loaded";
+      jumpWrap.style.display="flex";
       lookupWrap.style.display="flex";
-      for(var i=0;i<nBatches;i++){var o=document.createElement("option");o.value=String(i);o.textContent="Batch "+(i+1);lkBatch.appendChild(o);}
+      for(var i=0;i<nBatches;i++){var o=document.createElement("option");o.value=String(i);o.textContent="Batch "+(i+1)+"/"+nBatches;batchSel.appendChild(o);}
       render();
     }else{
       infoEl.textContent="No data yet. Start sorting on the PC first.";

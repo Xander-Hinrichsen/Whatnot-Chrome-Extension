@@ -440,6 +440,35 @@ select {
   min-width: 140px;
 }
 
+.sort-batch-select {
+  padding: 4px 8px;
+  border: 1px solid #b0b0b0;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sort-jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sort-skip-input {
+  width: 72px;
+  padding: 4px 8px;
+  border: 1px solid #b0b0b0;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+
 .sort-lookup {
   display: flex;
   align-items: center;

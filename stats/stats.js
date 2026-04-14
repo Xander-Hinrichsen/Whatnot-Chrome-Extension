@@ -636,7 +636,7 @@
   const sortDisplay = document.getElementById("sortDisplay");
   const sortCardNum = document.getElementById("sortCardNum");
   const sortSub = document.getElementById("sortSub");
-  const sortBatchLabel = document.getElementById("sortBatchLabel");
+  const sortBatchSelect = document.getElementById("sortBatchSelect");
   const sortNote = document.getElementById("sortNote");
   const sortMin = document.getElementById("sortMin");
   const sortMax = document.getElementById("sortMax");
@@ -646,7 +646,8 @@
   const sortBackBtn = document.getElementById("sortBack");
   const sortPrevBtn = document.getElementById("sortPrev");
   const sortNextBtn = document.getElementById("sortNext");
-  const lookupBatch = document.getElementById("lookupBatch");
+  const sortSkipTo = document.getElementById("sortSkipTo");
+  const sortSkipBtn = document.getElementById("sortSkipBtn");
   const lookupCell = document.getElementById("lookupCell");
   const lookupResult = document.getElementById("lookupResult");
 
@@ -707,39 +708,49 @@
 
   /** Filter cards to only those relevant for the given batch */
   function cardsForBatch(batchIdx) {
+    if (batchIdx === 0) return sortCards.slice();
     const prevAccts = previousBatchAccounts(batchIdx);
     return sortCards.filter((c) => {
-      if (c.isGiveaway) return true;
       if (sortExcluded.has(c.owner)) return false;
       if (prevAccts.has(c.owner)) return false;
       return true;
     });
   }
 
-  function populateLookupBatches() {
-    lookupBatch.textContent = "";
+  function populateBatchSelect() {
+    sortBatchSelect.textContent = "";
     const n = totalBatches();
     for (let b = 0; b < n; b++) {
       const opt = document.createElement("option");
       opt.value = String(b);
-      opt.textContent = `Batch ${b + 1}`;
-      lookupBatch.appendChild(opt);
+      opt.textContent = `Batch ${b + 1} / ${n}`;
+      sortBatchSelect.appendChild(opt);
     }
+    sortBatchSelect.value = String(sortBatch);
   }
 
   function doLookup() {
-    const b = parseInt(lookupBatch.value, 10);
     const code = (lookupCell.value || "").trim().toUpperCase();
-    if (isNaN(b) || !code) { lookupResult.textContent = ""; return; }
-    const map = batchCellMap(b);
+    if (!code) { lookupResult.textContent = ""; return; }
+    const map = batchCellMap(sortBatch);
     let found = null;
     map.forEach((cell, owner) => { if (cell === code) found = owner; });
     if (found) {
-      const cards = cardsForBatch(b).filter((c) => c.owner === found && !c.isGiveaway);
-      const nums = cards.map((c) => `#${c.cardNum}`).join(", ");
+      const all = cardsForBatch(sortBatch).filter((c) => c.owner === found);
+      const nums = all.map((c) => c.isGiveaway ? c.cardNum : `#${c.cardNum}`).join(", ");
       lookupResult.textContent = `${found} — ${nums || "no cards"}`;
     } else {
       lookupResult.textContent = "Empty cell";
+    }
+  }
+
+  function jumpToCard(cardNum) {
+    const target = parseInt(cardNum, 10);
+    if (isNaN(target)) return;
+    const idx = sortBatchCards.findIndex((c) => c.cardNum === target);
+    if (idx >= 0) {
+      sortCardIdx = idx;
+      renderSortStep();
     }
   }
 
@@ -760,12 +771,17 @@
       if (o) sortAccountCounts.set(o, (sortAccountCounts.get(o) || 0) + 1);
     }
 
+    const gw = lastFilteredGw || [];
+    for (let i = 0; i < gw.length; i++) {
+      const o = (gw[i].owner || "").trim();
+      if (o) sortAccountCounts.set(o, (sortAccountCounts.get(o) || 0) + 1);
+    }
+
     const soldEntries = sold
       .filter((c) => c.cardNum != null)
       .map((c) => ({ cardNum: c.cardNum, owner: (c.owner || "").trim(), isGiveaway: false }))
       .sort((a, b) => a.cardNum - b.cardNum);
 
-    const gw = lastFilteredGw || [];
     const gwEntries = gw.map((g, i) => ({
       cardNum: g.id || `g${i + 1}`,
       owner: (g.owner || "").trim(),
@@ -808,7 +824,7 @@
     sortNote.textContent = "";
     sortSetup.hidden = true;
     sortStepper.hidden = false;
-    populateLookupBatches();
+    populateBatchSelect();
     renderSortStep();
   }
 
@@ -819,23 +835,24 @@
     const cellMap = batchCellMap(sortBatch);
     const nBatches = totalBatches();
 
-    sortBatchLabel.textContent = `Batch ${sortBatch + 1} / ${nBatches}`;
+    sortBatchSelect.value = String(sortBatch);
 
     sortDisplay.className = "sort-display";
     sortSub.textContent = "";
 
-    if (card.isGiveaway) {
-      sortDisplay.classList.add("cell-giveaway");
-      sortDisplay.textContent = "Giveaway";
-      sortSub.textContent = owner;
+    const gwTag = card.isGiveaway ? " (Giveaway)" : "";
+    if (sortExcluded.has(owner)) {
+      sortDisplay.classList.add("cell-excluded");
+      sortDisplay.textContent = "✕";
+      sortSub.textContent = (sortExcludeReason.get(owner) || "Excluded") + gwTag;
     } else if (cellMap.has(owner)) {
-      sortDisplay.classList.add("cell-hit");
+      sortDisplay.classList.add(card.isGiveaway ? "cell-giveaway" : "cell-hit");
       sortDisplay.textContent = cellMap.get(owner);
-      sortSub.textContent = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards`;
+      sortSub.textContent = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards${gwTag}`;
     } else {
       sortDisplay.classList.add("cell-skip");
       sortDisplay.textContent = "—";
-      sortSub.textContent = "Not in this batch";
+      sortSub.textContent = "Not in this batch" + gwTag;
     }
 
     sortCardNum.textContent = card.isGiveaway ? `${card.cardNum}` : `Card #${card.cardNum}`;
@@ -898,8 +915,22 @@
     }
   });
 
-  lookupBatch.addEventListener("change", doLookup);
+  sortBatchSelect.addEventListener("change", () => {
+    const b = parseInt(sortBatchSelect.value, 10);
+    if (isNaN(b) || b === sortBatch) return;
+    sortBatch = b;
+    sortBatchCards = cardsForBatch(sortBatch);
+    sortCardIdx = 0;
+    renderSortStep();
+    doLookup();
+  });
+
   lookupCell.addEventListener("input", doLookup);
+
+  sortSkipBtn.addEventListener("click", () => jumpToCard(sortSkipTo.value));
+  sortSkipTo.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); jumpToCard(sortSkipTo.value); }
+  });
 
   // ---------- Remote Session ----------
 
@@ -933,22 +964,25 @@
       const cellMap = batchCellMap(b);
       const filtered = cardsForBatch(b);
       const cards = filtered.map((c) => {
-        if (c.isGiveaway) {
-          return { cardNum: c.cardNum, status: "giveaway", owner: c.owner };
+        const gw = c.isGiveaway || false;
+        const gwTag = gw ? " (Giveaway)" : "";
+        if (sortExcluded.has(c.owner)) {
+          return { cardNum: c.cardNum, status: "excluded", giveaway: gw, reason: (sortExcludeReason.get(c.owner) || "Excluded") + gwTag };
         }
         if (cellMap.has(c.owner)) {
           return {
             cardNum: c.cardNum,
             status: "hit",
+            giveaway: gw,
             cell: cellMap.get(c.owner),
-            ownerInfo: `${c.owner} — ${sortAccountCounts.get(c.owner) || "?"} cards`,
+            ownerInfo: `${c.owner} — ${sortAccountCounts.get(c.owner) || "?"} cards${gwTag}`,
           };
         }
-        return { cardNum: c.cardNum, status: "skip" };
+        return { cardNum: c.cardNum, status: "skip", giveaway: gw };
       });
       const cellToAccount = {};
       cellMap.forEach((cell, owner) => {
-        const nums = filtered.filter((c) => c.owner === owner && !c.isGiveaway).map((c) => c.cardNum);
+        const nums = filtered.filter((c) => c.owner === owner).map((c) => c.cardNum);
         cellToAccount[cell] = { owner, cards: nums };
       });
       batches.push({ cards, cellToAccount });
