@@ -1,4 +1,4 @@
-const roomData = new Map<string, string>();
+const kv = await Deno.openKv();
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -203,13 +203,13 @@ Deno.serve({ port: parseInt(Deno.env.get("PORT") || "7777") }, (req) => {
   if (dataMatch) {
     const roomId = dataMatch[1];
     if (req.method === "POST") {
-      return req.text().then((body) => {
-        roomData.set(roomId, body);
-        return new Response("ok", { headers: CORS });
-      });
+      const body = await req.text();
+      await kv.set(["room", roomId], body, { expireIn: 24 * 60 * 60 * 1000 });
+      return new Response("ok", { headers: CORS });
     }
     if (req.method === "GET") {
-      const body = roomData.get(roomId) || "{}";
+      const entry = await kv.get(["room", roomId]);
+      const body = (entry.value as string) || "{}";
       return new Response(body, {
         headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
       });
