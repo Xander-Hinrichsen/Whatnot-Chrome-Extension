@@ -1,40 +1,4 @@
-const rooms = new Map<string, Room>();
-
-interface Room {
-  host: WebSocket | null;
-  phones: Set<WebSocket>;
-  lastState: string | null;
-}
-
-function getOrCreateRoom(id: string): Room {
-  let room = rooms.get(id);
-  if (!room) {
-    room = { host: null, phones: new Set(), lastState: null };
-    rooms.set(id, room);
-  }
-  return room;
-}
-
-function broadcast(room: Room, msg: string) {
-  for (const ws of room.phones) {
-    if (ws.readyState === WebSocket.OPEN) ws.send(msg);
-  }
-}
-
-function handleHostSocket(ws: WebSocket, room: Room) {
-  if (room.host && room.host.readyState === WebSocket.OPEN) {
-    room.host.close(4000, "replaced");
-  }
-  room.host = ws;
-  ws.addEventListener("message", (e) => {
-    const raw = typeof e.data === "string" ? e.data : "";
-    room.lastState = raw;
-    broadcast(room, raw);
-  });
-  ws.addEventListener("close", () => {
-    if (room.host === ws) room.host = null;
-  });
-}
+const roomData = new Map<string, string>();
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -55,7 +19,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,system-ui,sans-s
 .wrap{display:flex;flex-direction:column;height:100%;padding:10px}
 .info{text-align:center;font-size:14px;color:#666;padding:6px 0;flex-shrink:0}
 .display-area{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
-.cell{font-size:min(28vw,140px);font-weight:800;line-height:1;padding:20px 32px;border-radius:16px;text-align:center;min-width:50%;transition:all .15s ease}
+.cell{font-size:min(28vw,140px);font-weight:800;line-height:1;padding:20px 32px;border-radius:16px;text-align:center;min-width:50%;transition:all .12s ease}
 .cell.hit{background:#e8f5e9;color:#1b5e20;border:4px solid #66bb6a}
 .cell.skip{background:#fff3e0;color:#e65100;border:4px solid #ffb74d;font-size:min(8vw,36px);font-weight:600}
 .cell.excluded{background:#fce4ec;color:#b71c1c;border:4px solid #ef9a9a;font-size:min(7vw,30px);font-weight:600}
@@ -69,64 +33,82 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,system-ui,sans-s
 </head>
 <body>
 <div class="wrap">
-  <div class="info" id="info">Connecting...</div>
-  <div class="display-area"><div class="cell" id="cell">\\u2014</div></div>
+  <div class="info" id="info">Loading data...</div>
+  <div class="display-area"><div class="cell" id="cell">...</div></div>
   <div class="sub" id="sub"></div>
   <div class="nav">
-    <button id="prev">Prev</button>
-    <button id="next">Next</button>
+    <button id="prev" disabled>Prev</button>
+    <button id="next" disabled>Next</button>
   </div>
   <div class="status" id="status"></div>
 </div>
 <script>
 (function(){
   var roomId="${roomId}";
-  var base=location.origin;
   var cellEl=document.getElementById("cell");
   var infoEl=document.getElementById("info");
   var subEl=document.getElementById("sub");
   var statusEl=document.getElementById("status");
   var prevBtn=document.getElementById("prev");
   var nextBtn=document.getElementById("next");
-  var lastJson="";
 
-  function poll(){
-    fetch(base+"/api/"+roomId+"/state").then(function(r){return r.text();}).then(function(txt){
-      if(txt&&txt!==lastJson){
-        lastJson=txt;
-        try{
-          var s=JSON.parse(txt);
-          if(s.type==="state"&&s.data){
-            var d=s.data;
-            cellEl.textContent=d.cell||"\\u2014";
-            cellEl.className="cell "+(d.cellClass||"");
-            infoEl.textContent="Batch "+d.batch+" \\u00b7 Card #"+d.cardNum+" ("+d.cardIdx+"/"+d.totalCards+")";
-            subEl.textContent=d.sub||"";
-            prevBtn.disabled=!!d.prevDisabled;
-            nextBtn.disabled=!!d.nextDisabled;
-            nextBtn.textContent=d.nextLabel||"Next";
-          }
-        }catch(ex){}
-      }
-      statusEl.textContent="Connected";
-    }).catch(function(){
-      statusEl.textContent="Reconnecting...";
-    });
+  var cards=[];
+  var totalBatches=1;
+  var batch=0;
+  var idx=0;
+
+  function render(){
+    if(!cards.length)return;
+    var c=cards[idx];
+    var nb=totalBatches;
+
+    var cell,cls,sub;
+    if(c.status==="excluded"){
+      cell="\\u2715";cls="excluded";sub=c.reason||"Excluded";
+    }else if(c.batchIdx===batch){
+      cell=c.cell;cls="hit";sub=c.ownerInfo;
+    }else{
+      cell="\\u2014";cls="skip";sub="Not in this batch";
+    }
+
+    cellEl.textContent=cell;
+    cellEl.className="cell "+cls;
+    infoEl.textContent="Batch "+(batch+1)+"/"+nb+" \\u00b7 Card #"+c.cardNum+" ("+(idx+1)+"/"+cards.length+")";
+    subEl.textContent=sub;
+
+    prevBtn.disabled=(idx===0&&batch===0);
+    var isLast=idx>=cards.length-1;
+    var isLastBatch=batch>=nb-1;
+    if(isLast&&!isLastBatch){nextBtn.textContent="Batch "+(batch+2);nextBtn.disabled=false;}
+    else if(isLast&&isLastBatch){nextBtn.textContent="Done";nextBtn.disabled=true;}
+    else{nextBtn.textContent="Next";nextBtn.disabled=false;}
   }
 
-  function sendCmd(action){
-    fetch(base+"/api/"+roomId+"/command",{
-      method:"POST",
-      headers:{"content-type":"application/json"},
-      body:JSON.stringify({type:"command",action:action})
-    }).catch(function(){});
+  function goNext(){
+    if(idx<cards.length-1){idx++;render();}
+    else if(batch<totalBatches-1){batch++;idx=0;render();}
+  }
+  function goPrev(){
+    if(idx>0){idx--;render();}
+    else if(batch>0){batch--;idx=cards.length-1;render();}
   }
 
-  prevBtn.onclick=function(){sendCmd("prev");};
-  nextBtn.onclick=function(){sendCmd("next");};
+  nextBtn.onclick=goNext;
+  prevBtn.onclick=goPrev;
 
-  setInterval(poll,300);
-  poll();
+  fetch(location.origin+"/api/"+roomId+"/data").then(function(r){return r.json();}).then(function(d){
+    cards=d.cards||[];
+    totalBatches=d.totalBatches||1;
+    batch=0;idx=0;
+    if(cards.length){
+      statusEl.textContent=cards.length+" cards loaded";
+      render();
+    }else{
+      infoEl.textContent="No data yet. Start sorting on the PC first.";
+    }
+  }).catch(function(){
+    infoEl.textContent="Failed to load data. Check the session.";
+  });
 })();
 </script>
 </body>
@@ -150,48 +132,25 @@ Deno.serve({ port: parseInt(Deno.env.get("PORT") || "7777") }, (req) => {
   const roomPageMatch = path.match(/^\/room\/([a-zA-Z0-9_-]+)$/);
   if (roomPageMatch) {
     return new Response(phoneHtml(roomPageMatch[1]), {
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-        ...CORS,
-      },
+      headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...CORS },
     });
   }
 
-  // Phone HTTP polling: get current state
-  const stateMatch = path.match(/^\/api\/([a-zA-Z0-9_-]+)\/state$/);
-  if (stateMatch && req.method === "GET") {
-    const room = rooms.get(stateMatch[1]);
-    const body = room?.lastState || "";
-    return new Response(body, {
-      headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
-    });
-  }
-
-  // Phone HTTP polling: send command to host
-  const cmdMatch = path.match(/^\/api\/([a-zA-Z0-9_-]+)\/command$/);
-  if (cmdMatch && req.method === "POST") {
-    const room = rooms.get(cmdMatch[1]);
-    if (room?.host && room.host.readyState === WebSocket.OPEN) {
-      req.text().then((body) => room.host!.send(body)).catch(() => {});
+  const dataMatch = path.match(/^\/api\/([a-zA-Z0-9_-]+)\/data$/);
+  if (dataMatch) {
+    const roomId = dataMatch[1];
+    if (req.method === "POST") {
+      return req.text().then((body) => {
+        roomData.set(roomId, body);
+        return new Response("ok", { headers: CORS });
+      });
     }
-    return new Response("ok", { headers: CORS });
-  }
-
-  // Host WebSocket (PC extension connects here)
-  const wsMatch = path.match(/^\/ws\/([a-zA-Z0-9_-]+)$/);
-  if (wsMatch) {
-    const roomId = wsMatch[1];
-    const role = url.searchParams.get("role") || "phone";
-    if (req.headers.get("upgrade")?.toLowerCase() !== "websocket") {
-      return new Response("Expected WebSocket", { status: 400 });
+    if (req.method === "GET") {
+      const body = roomData.get(roomId) || "{}";
+      return new Response(body, {
+        headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
+      });
     }
-    const { socket, response } = Deno.upgradeWebSocket(req);
-    const room = getOrCreateRoom(roomId);
-    if (role === "host") {
-      handleHostSocket(socket, room);
-    }
-    return response;
   }
 
   return new Response("Not found", { status: 404, headers: CORS });

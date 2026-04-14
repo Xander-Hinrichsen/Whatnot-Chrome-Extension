@@ -846,8 +846,6 @@
     localStorage.setItem("sortRelayUrl", relayUrlInput.value.trim());
   });
 
-  /** @type {WebSocket | null} */
-  let sessionWs = null;
   let sessionRoomId = "";
   let sessionActive = false;
 
@@ -858,112 +856,81 @@
     return id;
   }
 
-  function buildSortState() {
-    if (!sortCards.length) return null;
-    const card = sortCards[sortCardIdx];
-    const owner = card.owner;
-    const cellMap = batchCellMap(sortBatch);
+  function buildFullSortData() {
     const nBatches = totalBatches();
-
-    let cell = "—", cellClass = "skip", sub = "Not in this batch";
-    if (sortExcluded.has(owner)) {
-      cell = "✕";
-      cellClass = "excluded";
-      sub = sortExcludeReason.get(owner) || "Excluded";
-    } else if (cellMap.has(owner)) {
-      cell = cellMap.get(owner);
-      cellClass = "hit";
-      sub = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards`;
+    const ownerToBatch = new Map();
+    const ownerToCell = new Map();
+    for (let b = 0; b < nBatches; b++) {
+      const accts = batchAccounts(b);
+      for (let i = 0; i < accts.length; i++) {
+        ownerToBatch.set(accts[i].owner, b);
+        ownerToCell.set(accts[i].owner, cellName(i));
+      }
     }
-
-    const isLast = sortCardIdx >= sortCards.length - 1;
-    const isLastBatch = sortBatch >= nBatches - 1;
-    let nextLabel = "Next";
-    if (isLast && !isLastBatch) nextLabel = `Batch ${sortBatch + 2}`;
-    else if (isLast && isLastBatch) nextLabel = "Done";
-
-    return {
-      cell,
-      cellClass,
-      sub,
-      batch: `${sortBatch + 1}/${nBatches}`,
-      cardNum: card.cardNum,
-      cardIdx: `${sortCardIdx + 1}`,
-      totalCards: `${sortCards.length}`,
-      totalBatches: `${nBatches}`,
-      prevDisabled: sortCardIdx === 0 && sortBatch === 0,
-      nextDisabled: isLast && isLastBatch,
-      nextLabel,
-    };
+    const cards = sortCards.map((c) => {
+      const owner = c.owner;
+      if (sortExcluded.has(owner)) {
+        return { cardNum: c.cardNum, status: "excluded", reason: sortExcludeReason.get(owner) || "Excluded" };
+      }
+      return {
+        cardNum: c.cardNum,
+        status: "batch",
+        batchIdx: ownerToBatch.get(owner) ?? -1,
+        cell: ownerToCell.get(owner) || "?",
+        ownerInfo: `${owner} — ${sortAccountCounts.get(owner) || "?"} cards`,
+      };
+    });
+    return { cards, totalBatches: nBatches };
   }
 
-  function syncState() {
-    if (!sessionWs || sessionWs.readyState !== WebSocket.OPEN) return;
-    const state = buildSortState();
-    if (state) sessionWs.send(JSON.stringify({ type: "state", data: state }));
-  }
+  function syncState() {}
 
-  function startSession() {
+  async function startSession() {
     const relay = (relayUrlInput.value || "").trim().replace(/\/+$/, "");
     if (!relay) {
       sessionStatusEl.textContent = "Enter a relay URL first.";
       return;
     }
-    if (!sessionRoomId) sessionRoomId = randomRoomId();
-    const wsProto = relay.startsWith("https") ? "wss" : "ws";
-    const relayHost = relay.replace(/^https?:\/\//, "");
-    const wsUrl = `${wsProto}://${relayHost}/ws/${sessionRoomId}?role=host`;
+    if (!sortCards.length) {
+      sessionStatusEl.textContent = "No sort data to share.";
+      return;
+    }
+
+    sessionRoomId = randomRoomId();
     const phoneUrl = `${relay}/room/${sessionRoomId}`;
+    sessionStatusEl.textContent = "Uploading data…";
 
-    sessionStatusEl.textContent = "Connecting…";
-    sessionWs = new WebSocket(wsUrl);
+    try {
+      const data = buildFullSortData();
+      const res = await fetch(`${relay}/api/${sessionRoomId}/data`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+    } catch (err) {
+      sessionStatusEl.textContent = `Upload failed: ${err.message}`;
+      return;
+    }
 
-    sessionWs.onopen = () => {
-      sessionActive = true;
-      sessionToggleBtn.textContent = "Stop session";
-      sessionPanel.hidden = false;
-      sessionStatusEl.textContent = "Connected — phones can join";
+    sessionActive = true;
+    sessionToggleBtn.textContent = "Stop session";
+    sessionPanel.hidden = false;
+    sessionStatusEl.textContent = `Ready — ${sortCards.length} cards uploaded`;
 
-      qrCodeEl.textContent = "";
-      if (typeof qrcode !== "undefined") {
-        const qr = qrcode(0, "M");
-        qr.addData(phoneUrl);
-        qr.make();
-        qrCodeEl.innerHTML = qr.createImgTag(4, 8);
-      }
-      sessionUrlEl.textContent = phoneUrl;
-      syncState();
-    };
-
-    sessionWs.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "command") {
-          if (msg.action === "next") sortNextBtn.click();
-          else if (msg.action === "prev") sortPrevBtn.click();
-        }
-      } catch (_) {}
-    };
-
-    sessionWs.onclose = () => {
-      if (sessionActive) {
-        sessionStatusEl.textContent = "Disconnected — reconnecting…";
-        setTimeout(startSession, 1500);
-      }
-    };
-
-    sessionWs.onerror = () => {
-      sessionStatusEl.textContent = "Connection error";
-    };
+    qrCodeEl.textContent = "";
+    if (typeof qrcode !== "undefined") {
+      const qr = qrcode(0, "M");
+      qr.addData(phoneUrl);
+      qr.make();
+      qrCodeEl.innerHTML = qr.createImgTag(4, 8);
+    }
+    sessionUrlEl.textContent = phoneUrl;
   }
 
   function stopSession() {
     sessionActive = false;
     sessionRoomId = "";
-    if (sessionWs) {
-      sessionWs.close();
-      sessionWs = null;
-    }
     sessionToggleBtn.textContent = "Start session";
     sessionPanel.hidden = true;
     qrCodeEl.textContent = "";
