@@ -16,6 +16,7 @@
     <nav class="tab-bar" aria-label="Views">
       <button type="button" class="tab tab-active" data-panel="overview">Overview</button>
       <button type="button" class="tab" data-panel="data">Data</button>
+      <button type="button" class="tab" data-panel="sort">Sort Helper</button>
     </nav>
 
     <div id="panelOverview" class="tab-panel">
@@ -125,6 +126,34 @@
           <tbody id="tbodyGiveaway"></tbody>
         </table>
       </div>
+    </div>
+
+    <div id="panelSort" class="tab-panel" hidden>
+      <section class="sort-setup" id="sortSetup">
+        <h3 class="sort-heading">Sort parameters</h3>
+        <div class="sort-fields">
+          <label>Min cards / account <input type="number" id="sortMin" value="2" min="1" max="999"></label>
+          <label>Max cards / account <input type="number" id="sortMax" value="999" min="1" max="9999"></label>
+          <label>Grid rows <input type="number" id="sortRows" value="5" min="1" max="26"></label>
+          <label>Grid cols <input type="number" id="sortCols" value="5" min="1" max="99"></label>
+        </div>
+        <button type="button" id="sortStart">Start sorting</button>
+        <p class="sort-note" id="sortNote"></p>
+      </section>
+
+      <section class="sort-stepper" id="sortStepper" hidden>
+        <div class="sort-info">
+          <span id="sortBatchLabel"></span>
+          <span id="sortCardLabel"></span>
+          <button type="button" id="sortBack" class="sort-btn-small">← Back to setup</button>
+        </div>
+        <div class="sort-display" id="sortDisplay"></div>
+        <div class="sort-sub" id="sortSub"></div>
+        <div class="sort-nav">
+          <button type="button" id="sortPrev" class="sort-nav-btn">← Prev</button>
+          <button type="button" id="sortNext" class="sort-nav-btn">Next →</button>
+        </div>
+      </section>
     </div>
 
     <script src="../vendor/chart.umd.min.js"></script>

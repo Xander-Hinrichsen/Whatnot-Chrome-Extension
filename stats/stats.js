@@ -18,6 +18,7 @@
   const elStatGiveaways = document.getElementById("statGiveaways");
   const elPanelOverview = document.getElementById("panelOverview");
   const elPanelData = document.getElementById("panelData");
+  const elPanelSort = document.getElementById("panelSort");
   const tbodySold = document.getElementById("tbodySold");
   const tbodyGiveaway = document.getElementById("tbodyGiveaway");
 
@@ -600,6 +601,7 @@
       });
       elPanelOverview.hidden = panel !== "overview";
       elPanelData.hidden = panel !== "data";
+      elPanelSort.hidden = panel !== "sort";
     });
   });
 
@@ -625,6 +627,206 @@
       c.listingRaw || "",
     ]);
     downloadCsv("whatnot-giveaways.csv", header, rows);
+  });
+
+  // ---------- Sort Helper ----------
+
+  const sortSetup = document.getElementById("sortSetup");
+  const sortStepper = document.getElementById("sortStepper");
+  const sortDisplay = document.getElementById("sortDisplay");
+  const sortSub = document.getElementById("sortSub");
+  const sortBatchLabel = document.getElementById("sortBatchLabel");
+  const sortCardLabel = document.getElementById("sortCardLabel");
+  const sortNote = document.getElementById("sortNote");
+  const sortMin = document.getElementById("sortMin");
+  const sortMax = document.getElementById("sortMax");
+  const sortRowsInput = document.getElementById("sortRows");
+  const sortColsInput = document.getElementById("sortCols");
+  const sortStartBtn = document.getElementById("sortStart");
+  const sortBackBtn = document.getElementById("sortBack");
+  const sortPrevBtn = document.getElementById("sortPrev");
+  const sortNextBtn = document.getElementById("sortNext");
+
+  /** @type {{ cardNum: number; owner: string }[]} */
+  let sortCards = [];
+  /** @type {Map<string, number>} account → card count */
+  let sortAccountCounts = new Map();
+  /** @type {{ owner: string; count: number }[]} sorted accounts for batching */
+  let sortAccountOrder = [];
+  /** @type {Set<string>} excluded accounts */
+  let sortExcluded = new Set();
+  /** @type {Map<string, string>} account → exclusion reason */
+  let sortExcludeReason = new Map();
+  let sortGridRows = 5;
+  let sortGridCols = 5;
+  let sortBatch = 0;
+  let sortCardIdx = 0;
+
+  function cellName(flatIdx) {
+    const row = Math.floor(flatIdx / sortGridCols);
+    const col = flatIdx % sortGridCols;
+    return String.fromCharCode(65 + row) + String(col + 1);
+  }
+
+  function batchSize() {
+    return sortGridRows * sortGridCols;
+  }
+
+  function totalBatches() {
+    return Math.max(1, Math.ceil(sortAccountOrder.length / batchSize()));
+  }
+
+  function batchAccounts(batchIdx) {
+    const start = batchIdx * batchSize();
+    return sortAccountOrder.slice(start, start + batchSize());
+  }
+
+  /** @returns {Map<string, string>} account → cell name for current batch */
+  function batchCellMap(batchIdx) {
+    const accts = batchAccounts(batchIdx);
+    const map = new Map();
+    for (let i = 0; i < accts.length; i++) {
+      map.set(accts[i].owner, cellName(i));
+    }
+    return map;
+  }
+
+  function initSort() {
+    const sold = lastFilteredSold || [];
+    if (!sold.length) {
+      sortNote.textContent = "No sold card data. Fetch data first.";
+      return;
+    }
+    const minCards = parseInt(String(sortMin.value), 10) || 1;
+    const maxCards = parseInt(String(sortMax.value), 10) || 9999;
+    sortGridRows = Math.max(1, Math.min(26, parseInt(String(sortRowsInput.value), 10) || 5));
+    sortGridCols = Math.max(1, Math.min(99, parseInt(String(sortColsInput.value), 10) || 5));
+
+    sortAccountCounts = new Map();
+    for (let i = 0; i < sold.length; i++) {
+      const o = (sold[i].owner || "").trim();
+      if (o) sortAccountCounts.set(o, (sortAccountCounts.get(o) || 0) + 1);
+    }
+
+    sortCards = sold
+      .filter((c) => c.cardNum != null)
+      .map((c) => ({ cardNum: c.cardNum, owner: (c.owner || "").trim() }))
+      .sort((a, b) => a.cardNum - b.cardNum);
+
+    if (!sortCards.length) {
+      sortNote.textContent = "No cards with valid card numbers found.";
+      return;
+    }
+
+    sortExcluded = new Set();
+    sortExcludeReason = new Map();
+    sortAccountOrder = [];
+
+    sortAccountCounts.forEach((count, owner) => {
+      if (count < minCards) {
+        sortExcluded.add(owner);
+        sortExcludeReason.set(owner, count === 1 ? "Single card account" : `Only ${count} cards (min: ${minCards})`);
+      } else if (count > maxCards) {
+        sortExcluded.add(owner);
+        sortExcludeReason.set(owner, `${count} cards (max: ${maxCards})`);
+      } else {
+        sortAccountOrder.push({ owner, count });
+      }
+    });
+
+    sortAccountOrder.sort((a, b) => b.count - a.count);
+
+    if (!sortAccountOrder.length) {
+      sortNote.textContent = `All accounts excluded by filters (min: ${minCards}, max: ${maxCards}). Adjust and try again.`;
+      return;
+    }
+
+    sortBatch = 0;
+    sortCardIdx = 0;
+    sortNote.textContent = "";
+    sortSetup.hidden = true;
+    sortStepper.hidden = false;
+    renderSortStep();
+  }
+
+  function renderSortStep() {
+    if (!sortCards.length) return;
+    const card = sortCards[sortCardIdx];
+    const owner = card.owner;
+    const cellMap = batchCellMap(sortBatch);
+    const nBatches = totalBatches();
+
+    sortBatchLabel.textContent = `Batch ${sortBatch + 1} / ${nBatches}`;
+    sortCardLabel.textContent = `Card #${card.cardNum} (${sortCardIdx + 1} / ${sortCards.length})`;
+
+    sortDisplay.className = "sort-display";
+    sortSub.textContent = "";
+
+    if (sortExcluded.has(owner)) {
+      sortDisplay.classList.add("cell-excluded");
+      sortDisplay.textContent = "✕";
+      sortSub.textContent = sortExcludeReason.get(owner) || "Excluded";
+    } else if (cellMap.has(owner)) {
+      sortDisplay.classList.add("cell-hit");
+      sortDisplay.textContent = cellMap.get(owner);
+      sortSub.textContent = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards`;
+    } else {
+      sortDisplay.classList.add("cell-skip");
+      sortDisplay.textContent = "—";
+      sortSub.textContent = "Not in this batch";
+    }
+
+    sortPrevBtn.disabled = sortCardIdx === 0 && sortBatch === 0;
+    const isLast = sortCardIdx >= sortCards.length - 1;
+    const isLastBatch = sortBatch >= nBatches - 1;
+    if (isLast && !isLastBatch) {
+      sortNextBtn.textContent = `Batch ${sortBatch + 2} →`;
+    } else if (isLast && isLastBatch) {
+      sortNextBtn.textContent = "Done ✓";
+    } else {
+      sortNextBtn.textContent = "Next →";
+    }
+    sortNextBtn.disabled = isLast && isLastBatch;
+  }
+
+  sortStartBtn.addEventListener("click", initSort);
+
+  sortBackBtn.addEventListener("click", () => {
+    sortSetup.hidden = false;
+    sortStepper.hidden = true;
+  });
+
+  sortNextBtn.addEventListener("click", () => {
+    if (sortCardIdx < sortCards.length - 1) {
+      sortCardIdx++;
+      renderSortStep();
+    } else if (sortBatch < totalBatches() - 1) {
+      sortBatch++;
+      sortCardIdx = 0;
+      renderSortStep();
+    }
+  });
+
+  sortPrevBtn.addEventListener("click", () => {
+    if (sortCardIdx > 0) {
+      sortCardIdx--;
+      renderSortStep();
+    } else if (sortBatch > 0) {
+      sortBatch--;
+      sortCardIdx = sortCards.length - 1;
+      renderSortStep();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (elPanelSort.hidden || sortStepper.hidden) return;
+    if (e.key === "ArrowRight" || e.key === " ") {
+      e.preventDefault();
+      sortNextBtn.click();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      sortPrevBtn.click();
+    }
   });
 
   mplTheme();

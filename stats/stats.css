@@ -295,3 +295,131 @@ select {
 .data-table tbody tr:hover {
   background: #f9f9f9;
 }
+
+/* ---------- Sort Helper ---------- */
+
+.sort-heading {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sort-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-bottom: 14px;
+}
+
+.sort-fields label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.sort-fields input[type="number"] {
+  width: 72px;
+  padding: 6px 8px;
+  border: 1px solid #b0b0b0;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: center;
+}
+
+.sort-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+.sort-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.sort-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  width: 100%;
+  justify-content: center;
+}
+
+.sort-btn-small {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.sort-display {
+  font-size: 96px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  padding: 28px 40px;
+  border-radius: 12px;
+  min-width: 200px;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.sort-display.cell-hit {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border: 3px solid #66bb6a;
+}
+
+.sort-display.cell-skip {
+  background: #fff3e0;
+  color: #e65100;
+  border: 3px solid #ffb74d;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.sort-display.cell-excluded {
+  background: #fce4ec;
+  color: #b71c1c;
+  border: 3px solid #ef9a9a;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.sort-display.cell-batch {
+  background: #e3f2fd;
+  color: #0d47a1;
+  border: 3px solid #64b5f6;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.sort-sub {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  min-height: 1.4em;
+}
+
+.sort-nav {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.sort-nav-btn {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 14px 36px;
+  min-width: 140px;
+}
