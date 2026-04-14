@@ -404,6 +404,22 @@ select {
   font-weight: 600;
 }
 
+.sort-display.cell-giveaway {
+  background: #ede7f6;
+  color: #4a148c;
+  border: 3px solid #b39ddb;
+}
+
+.sort-card-num {
+  font-size: 48px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--fg);
+  min-height: 1.2em;
+  line-height: 1.1;
+  margin-top: -2px;
+}
+
 .sort-sub {
   font-size: 13px;
   color: var(--muted);
@@ -422,6 +438,69 @@ select {
   font-weight: 700;
   padding: 14px 36px;
   min-width: 140px;
+}
+
+.sort-batch-select {
+  padding: 4px 8px;
+  border: 1px solid #b0b0b0;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sort-jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sort-skip-input {
+  width: 72px;
+  padding: 4px 8px;
+  border: 1px solid #b0b0b0;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+
+.sort-lookup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.sort-lookup-label {
+  font-weight: 600;
+}
+
+.sort-lookup-input {
+  padding: 4px 8px;
+  border: 1px solid #b0b0b0;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.sort-lookup-cell {
+  width: 48px;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.sort-lookup-result {
+  font-weight: 500;
+  color: var(--fg);
 }
 
 /* ---------- Session / Remote ---------- */

@@ -634,9 +634,9 @@
   const sortSetup = document.getElementById("sortSetup");
   const sortStepper = document.getElementById("sortStepper");
   const sortDisplay = document.getElementById("sortDisplay");
+  const sortCardNum = document.getElementById("sortCardNum");
   const sortSub = document.getElementById("sortSub");
-  const sortBatchLabel = document.getElementById("sortBatchLabel");
-  const sortCardLabel = document.getElementById("sortCardLabel");
+  const sortBatchSelect = document.getElementById("sortBatchSelect");
   const sortNote = document.getElementById("sortNote");
   const sortMin = document.getElementById("sortMin");
   const sortMax = document.getElementById("sortMax");
@@ -646,10 +646,14 @@
   const sortBackBtn = document.getElementById("sortBack");
   const sortPrevBtn = document.getElementById("sortPrev");
   const sortNextBtn = document.getElementById("sortNext");
+  const sortSkipTo = document.getElementById("sortSkipTo");
+  const sortSkipBtn = document.getElementById("sortSkipBtn");
+  const lookupCell = document.getElementById("lookupCell");
+  const lookupResult = document.getElementById("lookupResult");
 
-  /** @type {{ cardNum: number; owner: string }[]} */
+  /** @type {{ cardNum: number | string; owner: string; isGiveaway?: boolean }[]} */
   let sortCards = [];
-  /** @type {Map<string, number>} account → card count */
+  /** @type {Map<string, number>} account → card count (sold only) */
   let sortAccountCounts = new Map();
   /** @type {{ owner: string; count: number }[]} sorted accounts for batching */
   let sortAccountOrder = [];
@@ -661,6 +665,10 @@
   let sortGridCols = 5;
   let sortBatch = 0;
   let sortCardIdx = 0;
+  /** @type {{ cardNum: number | string; owner: string; isGiveaway?: boolean }[]} */
+  let sortBatchCards = [];
+  /** @type {Map<string, number>} owner → batch index */
+  let sortOwnerBatch = new Map();
 
   function cellName(flatIdx) {
     const row = Math.floor(flatIdx / sortGridCols);
@@ -681,7 +689,7 @@
     return sortAccountOrder.slice(start, start + batchSize());
   }
 
-  /** @returns {Map<string, string>} account → cell name for current batch */
+  /** @returns {Map<string, string>} account → cell name for given batch */
   function batchCellMap(batchIdx) {
     const accts = batchAccounts(batchIdx);
     const map = new Map();
@@ -689,6 +697,63 @@
       map.set(accts[i].owner, cellName(i));
     }
     return map;
+  }
+
+  /** Accounts assigned to batches 0..batchIdx-1 */
+  function previousBatchAccounts(batchIdx) {
+    const set = new Set();
+    for (let b = 0; b < batchIdx; b++) {
+      for (const a of batchAccounts(b)) set.add(a.owner);
+    }
+    return set;
+  }
+
+  /** Filter cards to only those relevant for the given batch */
+  function cardsForBatch(batchIdx) {
+    if (batchIdx === 0) return sortCards.slice();
+    const prevAccts = previousBatchAccounts(batchIdx);
+    return sortCards.filter((c) => {
+      if (sortExcluded.has(c.owner)) return false;
+      if (prevAccts.has(c.owner)) return false;
+      return true;
+    });
+  }
+
+  function populateBatchSelect() {
+    sortBatchSelect.textContent = "";
+    const n = totalBatches();
+    for (let b = 0; b < n; b++) {
+      const opt = document.createElement("option");
+      opt.value = String(b);
+      opt.textContent = `Batch ${b + 1} / ${n}`;
+      sortBatchSelect.appendChild(opt);
+    }
+    sortBatchSelect.value = String(sortBatch);
+  }
+
+  function doLookup() {
+    const code = (lookupCell.value || "").trim().toUpperCase();
+    if (!code) { lookupResult.textContent = ""; return; }
+    const map = batchCellMap(sortBatch);
+    let found = null;
+    map.forEach((cell, owner) => { if (cell === code) found = owner; });
+    if (found) {
+      const all = cardsForBatch(sortBatch).filter((c) => c.owner === found);
+      const nums = all.map((c) => c.isGiveaway ? c.cardNum : `#${c.cardNum}`).join(", ");
+      lookupResult.textContent = `${found} — ${nums || "no cards"}`;
+    } else {
+      lookupResult.textContent = "Empty cell";
+    }
+  }
+
+  function jumpToCard(cardNum) {
+    const target = parseInt(cardNum, 10);
+    if (isNaN(target)) return;
+    const idx = sortBatchCards.findIndex((c) => c.cardNum === target);
+    if (idx >= 0) {
+      sortCardIdx = idx;
+      renderSortStep();
+    }
   }
 
   function initSort() {
@@ -708,10 +773,24 @@
       if (o) sortAccountCounts.set(o, (sortAccountCounts.get(o) || 0) + 1);
     }
 
-    sortCards = sold
+    const gw = lastFilteredGw || [];
+    for (let i = 0; i < gw.length; i++) {
+      const o = (gw[i].owner || "").trim();
+      if (o) sortAccountCounts.set(o, (sortAccountCounts.get(o) || 0) + 1);
+    }
+
+    const soldEntries = sold
       .filter((c) => c.cardNum != null)
-      .map((c) => ({ cardNum: c.cardNum, owner: (c.owner || "").trim() }))
+      .map((c) => ({ cardNum: c.cardNum, owner: (c.owner || "").trim(), isGiveaway: false }))
       .sort((a, b) => a.cardNum - b.cardNum);
+
+    const gwEntries = gw.map((g, i) => ({
+      cardNum: g.id || `g${i + 1}`,
+      owner: (g.owner || "").trim(),
+      isGiveaway: true,
+    }));
+
+    sortCards = [...soldEntries, ...gwEntries];
 
     if (!sortCards.length) {
       sortNote.textContent = "No cards with valid card numbers found.";
@@ -736,6 +815,12 @@
 
     sortAccountOrder.sort((a, b) => b.count - a.count);
 
+    sortOwnerBatch = new Map();
+    const bs = batchSize();
+    for (let i = 0; i < sortAccountOrder.length; i++) {
+      sortOwnerBatch.set(sortAccountOrder[i].owner, Math.floor(i / bs));
+    }
+
     if (!sortAccountOrder.length) {
       sortNote.textContent = `All accounts excluded by filters (min: ${minCards}, max: ${maxCards}). Adjust and try again.`;
       return;
@@ -743,41 +828,47 @@
 
     sortBatch = 0;
     sortCardIdx = 0;
+    sortBatchCards = cardsForBatch(0);
     sortNote.textContent = "";
     sortSetup.hidden = true;
     sortStepper.hidden = false;
+    populateBatchSelect();
     renderSortStep();
   }
 
   function renderSortStep() {
-    if (!sortCards.length) return;
-    const card = sortCards[sortCardIdx];
+    if (!sortBatchCards.length) return;
+    const card = sortBatchCards[sortCardIdx];
     const owner = card.owner;
     const cellMap = batchCellMap(sortBatch);
     const nBatches = totalBatches();
 
-    sortBatchLabel.textContent = `Batch ${sortBatch + 1} / ${nBatches}`;
-    sortCardLabel.textContent = `Card #${card.cardNum} (${sortCardIdx + 1} / ${sortCards.length})`;
+    sortBatchSelect.value = String(sortBatch);
 
     sortDisplay.className = "sort-display";
     sortSub.textContent = "";
 
+    const gwTag = card.isGiveaway ? " (Giveaway)" : "";
     if (sortExcluded.has(owner)) {
       sortDisplay.classList.add("cell-excluded");
       sortDisplay.textContent = "✕";
-      sortSub.textContent = sortExcludeReason.get(owner) || "Excluded";
+      sortSub.textContent = (sortExcludeReason.get(owner) || "Excluded") + gwTag;
     } else if (cellMap.has(owner)) {
-      sortDisplay.classList.add("cell-hit");
+      sortDisplay.classList.add(card.isGiveaway ? "cell-giveaway" : "cell-hit");
       sortDisplay.textContent = cellMap.get(owner);
-      sortSub.textContent = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards`;
+      sortSub.textContent = `${owner} — ${sortAccountCounts.get(owner) || "?"} cards${gwTag}`;
     } else {
+      const ob = sortOwnerBatch.get(owner);
       sortDisplay.classList.add("cell-skip");
       sortDisplay.textContent = "—";
-      sortSub.textContent = "Not in this batch";
+      sortSub.textContent = (ob != null ? `In batch ${ob + 1}` : "Not assigned") + gwTag;
     }
 
+    sortCardNum.textContent = card.isGiveaway ? `${card.cardNum}` : `Card #${card.cardNum}`;
+    sortCardNum.textContent += ` (${sortCardIdx + 1} / ${sortBatchCards.length})`;
+
     sortPrevBtn.disabled = sortCardIdx === 0 && sortBatch === 0;
-    const isLast = sortCardIdx >= sortCards.length - 1;
+    const isLast = sortCardIdx >= sortBatchCards.length - 1;
     const isLastBatch = sortBatch >= nBatches - 1;
     if (isLast && !isLastBatch) {
       sortNextBtn.textContent = `Batch ${sortBatch + 2} →`;
@@ -799,11 +890,12 @@
   });
 
   sortNextBtn.addEventListener("click", () => {
-    if (sortCardIdx < sortCards.length - 1) {
+    if (sortCardIdx < sortBatchCards.length - 1) {
       sortCardIdx++;
       renderSortStep();
     } else if (sortBatch < totalBatches() - 1) {
       sortBatch++;
+      sortBatchCards = cardsForBatch(sortBatch);
       sortCardIdx = 0;
       renderSortStep();
     }
@@ -815,7 +907,8 @@
       renderSortStep();
     } else if (sortBatch > 0) {
       sortBatch--;
-      sortCardIdx = sortCards.length - 1;
+      sortBatchCards = cardsForBatch(sortBatch);
+      sortCardIdx = sortBatchCards.length - 1;
       renderSortStep();
     }
   });
@@ -829,6 +922,23 @@
       e.preventDefault();
       sortPrevBtn.click();
     }
+  });
+
+  sortBatchSelect.addEventListener("change", () => {
+    const b = parseInt(sortBatchSelect.value, 10);
+    if (isNaN(b) || b === sortBatch) return;
+    sortBatch = b;
+    sortBatchCards = cardsForBatch(sortBatch);
+    sortCardIdx = 0;
+    renderSortStep();
+    doLookup();
+  });
+
+  lookupCell.addEventListener("input", doLookup);
+
+  sortSkipBtn.addEventListener("click", () => jumpToCard(sortSkipTo.value));
+  sortSkipTo.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); jumpToCard(sortSkipTo.value); }
   });
 
   // ---------- Remote Session ----------
@@ -858,29 +968,36 @@
 
   function buildFullSortData() {
     const nBatches = totalBatches();
-    const ownerToBatch = new Map();
-    const ownerToCell = new Map();
+    const batches = [];
     for (let b = 0; b < nBatches; b++) {
-      const accts = batchAccounts(b);
-      for (let i = 0; i < accts.length; i++) {
-        ownerToBatch.set(accts[i].owner, b);
-        ownerToCell.set(accts[i].owner, cellName(i));
-      }
+      const cellMap = batchCellMap(b);
+      const filtered = cardsForBatch(b);
+      const cards = filtered.map((c) => {
+        const gw = c.isGiveaway || false;
+        const gwTag = gw ? " (Giveaway)" : "";
+        if (sortExcluded.has(c.owner)) {
+          return { cardNum: c.cardNum, status: "excluded", giveaway: gw, reason: (sortExcludeReason.get(c.owner) || "Excluded") + gwTag };
+        }
+        if (cellMap.has(c.owner)) {
+          return {
+            cardNum: c.cardNum,
+            status: "hit",
+            giveaway: gw,
+            cell: cellMap.get(c.owner),
+            ownerInfo: `${c.owner} — ${sortAccountCounts.get(c.owner) || "?"} cards${gwTag}`,
+          };
+        }
+        const ob = sortOwnerBatch.get(c.owner);
+        return { cardNum: c.cardNum, status: "skip", giveaway: gw, inBatch: ob != null ? ob + 1 : null };
+      });
+      const cellToAccount = {};
+      cellMap.forEach((cell, owner) => {
+        const nums = filtered.filter((c) => c.owner === owner).map((c) => c.cardNum);
+        cellToAccount[cell] = { owner, cards: nums };
+      });
+      batches.push({ cards, cellToAccount });
     }
-    const cards = sortCards.map((c) => {
-      const owner = c.owner;
-      if (sortExcluded.has(owner)) {
-        return { cardNum: c.cardNum, status: "excluded", reason: sortExcludeReason.get(owner) || "Excluded" };
-      }
-      return {
-        cardNum: c.cardNum,
-        status: "batch",
-        batchIdx: ownerToBatch.get(owner) ?? -1,
-        cell: ownerToCell.get(owner) || "?",
-        ownerInfo: `${owner} — ${sortAccountCounts.get(owner) || "?"} cards`,
-      };
-    });
-    return { cards, totalBatches: nBatches };
+    return { batches, totalBatches: nBatches };
   }
 
   function syncState() {}
