@@ -36,18 +36,11 @@ function handleHostSocket(ws: WebSocket, room: Room) {
   });
 }
 
-function handlePhoneSocket(ws: WebSocket, room: Room) {
-  room.phones.add(ws);
-  if (room.lastState) ws.send(room.lastState);
-  ws.addEventListener("message", (e) => {
-    if (room.host && room.host.readyState === WebSocket.OPEN) {
-      room.host.send(typeof e.data === "string" ? e.data : "");
-    }
-  });
-  ws.addEventListener("close", () => {
-    room.phones.delete(ws);
-  });
-}
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
 
 function phoneHtml(roomId: string): string {
   return `<!DOCTYPE html>
@@ -77,61 +70,63 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,system-ui,sans-s
 <body>
 <div class="wrap">
   <div class="info" id="info">Connecting...</div>
-  <div class="display-area"><div class="cell" id="cell">—</div></div>
+  <div class="display-area"><div class="cell" id="cell">\\u2014</div></div>
   <div class="sub" id="sub"></div>
   <div class="nav">
-    <button id="prev" disabled>Prev</button>
-    <button id="next" disabled>Next</button>
+    <button id="prev">Prev</button>
+    <button id="next">Next</button>
   </div>
   <div class="status" id="status"></div>
 </div>
 <script>
 (function(){
   var roomId="${roomId}";
-  var ws,retryMs=500;
+  var base=location.origin;
   var cellEl=document.getElementById("cell");
   var infoEl=document.getElementById("info");
   var subEl=document.getElementById("sub");
   var statusEl=document.getElementById("status");
   var prevBtn=document.getElementById("prev");
   var nextBtn=document.getElementById("next");
+  var lastJson="";
 
-  function connect(){
-    var proto=location.protocol==="https:"?"wss:":"ws:";
-    ws=new WebSocket(proto+"//"+location.host+"/ws/"+roomId+"?role=phone");
-    ws.onopen=function(){
-      retryMs=500;
+  function poll(){
+    fetch(base+"/api/"+roomId+"/state").then(function(r){return r.text();}).then(function(txt){
+      if(txt&&txt!==lastJson){
+        lastJson=txt;
+        try{
+          var s=JSON.parse(txt);
+          if(s.type==="state"&&s.data){
+            var d=s.data;
+            cellEl.textContent=d.cell||"\\u2014";
+            cellEl.className="cell "+(d.cellClass||"");
+            infoEl.textContent="Batch "+d.batch+" \\u00b7 Card #"+d.cardNum+" ("+d.cardIdx+"/"+d.totalCards+")";
+            subEl.textContent=d.sub||"";
+            prevBtn.disabled=!!d.prevDisabled;
+            nextBtn.disabled=!!d.nextDisabled;
+            nextBtn.textContent=d.nextLabel||"Next";
+          }
+        }catch(ex){}
+      }
       statusEl.textContent="Connected";
-      prevBtn.disabled=false;
-      nextBtn.disabled=false;
-    };
-    ws.onmessage=function(e){
-      try{
-        var s=JSON.parse(e.data);
-        if(s.type==="state"&&s.data){
-          var d=s.data;
-          cellEl.textContent=d.cell||"—";
-          cellEl.className="cell "+(d.cellClass||"");
-          infoEl.textContent="Batch "+d.batch+" · Card #"+d.cardNum+" ("+d.cardIdx+"/"+d.totalCards+")";
-          subEl.textContent=d.sub||"";
-          prevBtn.disabled=!!d.prevDisabled;
-          nextBtn.disabled=!!d.nextDisabled;
-          nextBtn.textContent=d.nextLabel||"Next";
-        }
-      }catch(ex){}
-    };
-    ws.onclose=function(){
+    }).catch(function(){
       statusEl.textContent="Reconnecting...";
-      prevBtn.disabled=true;
-      nextBtn.disabled=true;
-      setTimeout(function(){retryMs=Math.min(retryMs*1.5,5000);connect();},retryMs);
-    };
+    });
   }
 
-  prevBtn.onclick=function(){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:"command",action:"prev"}));};
-  nextBtn.onclick=function(){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:"command",action:"next"}));};
+  function sendCmd(action){
+    fetch(base+"/api/"+roomId+"/command",{
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify({type:"command",action:action})
+    }).catch(function(){});
+  }
 
-  connect();
+  prevBtn.onclick=function(){sendCmd("prev");};
+  nextBtn.onclick=function(){sendCmd("next");};
+
+  setInterval(poll,300);
+  poll();
 })();
 </script>
 </body>
@@ -142,22 +137,48 @@ Deno.serve({ port: parseInt(Deno.env.get("PORT") || "7777") }, (req) => {
   const url = new URL(req.url);
   const path = url.pathname;
 
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+
   if (path === "/") {
     return new Response("Whatnot Sort Relay is running.", {
-      headers: { "content-type": "text/plain" },
+      headers: { "content-type": "text/plain", ...CORS },
     });
   }
 
-  const roomMatch = path.match(/^\/room\/([a-zA-Z0-9_-]+)$/);
-  if (roomMatch) {
-    return new Response(phoneHtml(roomMatch[1]), {
+  const roomPageMatch = path.match(/^\/room\/([a-zA-Z0-9_-]+)$/);
+  if (roomPageMatch) {
+    return new Response(phoneHtml(roomPageMatch[1]), {
       headers: {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
+        ...CORS,
       },
     });
   }
 
+  // Phone HTTP polling: get current state
+  const stateMatch = path.match(/^\/api\/([a-zA-Z0-9_-]+)\/state$/);
+  if (stateMatch && req.method === "GET") {
+    const room = rooms.get(stateMatch[1]);
+    const body = room?.lastState || "";
+    return new Response(body, {
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
+    });
+  }
+
+  // Phone HTTP polling: send command to host
+  const cmdMatch = path.match(/^\/api\/([a-zA-Z0-9_-]+)\/command$/);
+  if (cmdMatch && req.method === "POST") {
+    const room = rooms.get(cmdMatch[1]);
+    if (room?.host && room.host.readyState === WebSocket.OPEN) {
+      req.text().then((body) => room.host!.send(body)).catch(() => {});
+    }
+    return new Response("ok", { headers: CORS });
+  }
+
+  // Host WebSocket (PC extension connects here)
   const wsMatch = path.match(/^\/ws\/([a-zA-Z0-9_-]+)$/);
   if (wsMatch) {
     const roomId = wsMatch[1];
@@ -169,11 +190,9 @@ Deno.serve({ port: parseInt(Deno.env.get("PORT") || "7777") }, (req) => {
     const room = getOrCreateRoom(roomId);
     if (role === "host") {
       handleHostSocket(socket, room);
-    } else {
-      handlePhoneSocket(socket, room);
     }
     return response;
   }
 
-  return new Response("Not found", { status: 404 });
+  return new Response("Not found", { status: 404, headers: CORS });
 });
