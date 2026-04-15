@@ -178,7 +178,7 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
 </html>`;
 }
 
-Deno.serve({ port: parseInt(Deno.env.get("PORT") || "7777") }, (req) => {
+Deno.serve({ port: parseInt(Deno.env.get("PORT") || "7777") }, async (req) => {
   const url = new URL(req.url);
   const path = url.pathname;
 
