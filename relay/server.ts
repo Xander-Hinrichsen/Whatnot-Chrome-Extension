@@ -24,6 +24,9 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
 .cell.skip{background:#fff3e0;color:#e65100;border:4px solid #ffb74d;font-size:min(8vw,36px);font-weight:600}
 .cell.excluded{background:#fce4ec;color:#b71c1c;border:4px solid #ef9a9a;font-size:min(7vw,30px);font-weight:600}
 .cell.giveaway{background:#ede7f6;color:#4a148c;border:4px solid #b39ddb}
+.cell.declined{background:#ffebee;border:4px solid #ef9a9a;display:flex;align-items:center;justify-content:center;padding:24px}
+.cell.declined .declined-icon{display:block;width:min(40vw,200px);height:min(40vw,200px);border-radius:50%;border:min(5vw,22px) solid #c62828;position:relative;box-sizing:content-box}
+.cell.declined .declined-icon::before{content:"";position:absolute;top:50%;left:calc(-1 * min(5vw,22px));right:calc(-1 * min(5vw,22px));height:min(5vw,22px);background:#c62828;border-radius:3px;transform:translateY(-50%) rotate(45deg);transform-origin:center}
 .cardnum{font-size:min(14vw,64px);font-weight:700;text-align:center;margin-top:6px;min-height:1.2em;line-height:1.1}
 .sub{text-align:center;font-size:13px;color:#888;min-height:1.4em;padding:4px 0;flex-shrink:0}
 .nav{display:flex;gap:12px;padding:8px 0;flex-shrink:0}
@@ -94,8 +97,11 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
     if(!cards.length)return;
     var c=cards[idx];
 
-    var label,cls,sub;
-    if(c.status==="excluded"){
+    var label,cls,sub,html=null;
+    if(c.status==="declined"){
+      html='<span class="declined-icon" role="img" aria-label="Payment declined"></span>';
+      cls="declined";sub="Payment declined";
+    }else if(c.status==="excluded"){
       label="\\u2715";cls="excluded";sub=(c.reason||"Excluded");
     }else if(c.status==="hit"){
       label=c.cell;cls=c.giveaway?"giveaway":"hit";sub=c.ownerInfo;
@@ -103,7 +109,7 @@ html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:
       label="\\u2014";cls="skip";sub=(c.inBatch?"In batch "+c.inBatch:"Not assigned")+(c.giveaway?" (Giveaway)":"");
     }
 
-    cellEl.textContent=label;
+    if(html!==null){cellEl.innerHTML=html;}else{cellEl.textContent=label;}
     cellEl.className="cell "+cls;
     batchSel.value=String(batch);
     infoEl.textContent="";

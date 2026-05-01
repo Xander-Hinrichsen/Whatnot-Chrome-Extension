@@ -651,7 +651,7 @@
   const lookupCell = document.getElementById("lookupCell");
   const lookupResult = document.getElementById("lookupResult");
 
-  /** @type {{ cardNum: number | string; owner: string; isGiveaway?: boolean }[]} */
+  /** @type {{ cardNum: number | string; owner: string; isGiveaway?: boolean; isDeclined?: boolean }[]} */
   let sortCards = [];
   /** @type {Map<string, number>} account → card count (sold only) */
   let sortAccountCounts = new Map();
@@ -665,7 +665,7 @@
   let sortGridCols = 5;
   let sortBatch = 0;
   let sortCardIdx = 0;
-  /** @type {{ cardNum: number | string; owner: string; isGiveaway?: boolean }[]} */
+  /** @type {{ cardNum: number | string; owner: string; isGiveaway?: boolean; isDeclined?: boolean }[]} */
   let sortBatchCards = [];
   /** @type {Map<string, number>} owner → batch index */
   let sortOwnerBatch = new Map();
@@ -713,6 +713,9 @@
     if (batchIdx === 0) return sortCards.slice();
     const prevAccts = previousBatchAccounts(batchIdx);
     return sortCards.filter((c) => {
+      // Declined placeholders only appear in batch 0; in later batches gaps are
+      // expected because we filter out owners handled earlier, so the signal is noise.
+      if (c.isDeclined) return false;
       if (sortExcluded.has(c.owner)) return false;
       if (prevAccts.has(c.owner)) return false;
       return true;
@@ -784,13 +787,33 @@
       .map((c) => ({ cardNum: c.cardNum, owner: (c.owner || "").trim(), isGiveaway: false }))
       .sort((a, b) => a.cardNum - b.cardNum);
 
+    // Detect missing card numbers between the lowest and highest observed sold card.
+    // No order row exists for these (payment didn't go through), so we surface them
+    // explicitly so it doesn't feel like the stepper randomly skipped a card.
+    const declinedEntries = [];
+    const numericSold = soldEntries.filter((c) => Number.isInteger(c.cardNum));
+    if (numericSold.length >= 2) {
+      const present = new Set(numericSold.map((c) => c.cardNum));
+      const minN = numericSold[0].cardNum;
+      const maxN = numericSold[numericSold.length - 1].cardNum;
+      for (let n = minN + 1; n < maxN; n++) {
+        if (!present.has(n)) {
+          declinedEntries.push({ cardNum: n, owner: "", isDeclined: true });
+        }
+      }
+    }
+
+    const soldOrdered = [...soldEntries, ...declinedEntries].sort(
+      (a, b) => a.cardNum - b.cardNum
+    );
+
     const gwEntries = gw.map((g, i) => ({
       cardNum: g.id || `g${i + 1}`,
       owner: (g.owner || "").trim(),
       isGiveaway: true,
     }));
 
-    sortCards = [...soldEntries, ...gwEntries];
+    sortCards = [...soldOrdered, ...gwEntries];
 
     if (!sortCards.length) {
       sortNote.textContent = "No cards with valid card numbers found.";
@@ -849,7 +872,12 @@
     sortSub.textContent = "";
 
     const gwTag = card.isGiveaway ? " (Giveaway)" : "";
-    if (sortExcluded.has(owner)) {
+    if (card.isDeclined) {
+      sortDisplay.classList.add("cell-declined");
+      sortDisplay.innerHTML =
+        '<span class="declined-icon" role="img" aria-label="Payment declined"></span>';
+      sortSub.textContent = "Payment declined";
+    } else if (sortExcluded.has(owner)) {
       sortDisplay.classList.add("cell-excluded");
       sortDisplay.textContent = "✕";
       sortSub.textContent = (sortExcludeReason.get(owner) || "Excluded") + gwTag;
@@ -975,6 +1003,9 @@
       const cards = filtered.map((c) => {
         const gw = c.isGiveaway || false;
         const gwTag = gw ? " (Giveaway)" : "";
+        if (c.isDeclined) {
+          return { cardNum: c.cardNum, status: "declined" };
+        }
         if (sortExcluded.has(c.owner)) {
           return { cardNum: c.cardNum, status: "excluded", giveaway: gw, reason: (sortExcludeReason.get(c.owner) || "Excluded") + gwTag };
         }
